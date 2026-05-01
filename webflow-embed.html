@@ -1,0 +1,23 @@
+<!--
+  SMET Fixture Mundial 2026 — embed para Webflow
+  ------------------------------------------------
+  Pegar este bloque entero dentro de un Embed (HTML) en el <main> de la página.
+  No editar las URLs de jsDelivr: apuntan al repo y se actualizan solas cuando
+  hagamos cambios.
+  ------------------------------------------------
+  ÚNICOS valores a completar antes de publicar:
+    1) supabaseUrl       → Settings → API → Project URL
+    2) supabaseAnonKey   → Settings → API → anon / public key
+-->
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/tioass/esmet-fixture-2026@main/widget.css">
+
+<div id="smet-fixture"></div>
+
+<script>
+  window.SMET_FIXTURE_CONFIG = {
+    supabaseUrl: "https://TU-PROYECTO.supabase.co",
+    supabaseAnonKey: "TU_ANON_KEY"
+  };
+</script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/tioass/esmet-fixture-2026@main/widget.js"></script>

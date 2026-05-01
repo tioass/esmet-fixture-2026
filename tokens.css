@@ -1,0 +1,32 @@
+/* SMET design tokens — extraídos de css/esmet-2025.webflow.css */
+.smet-fixture {
+  --smet-black: #0d0d0d;
+  --smet-white: #f4f4f4;
+  --smet-rojo: #c8573c;
+  --smet-beige: #ab9f8a;
+  --smet-gris: #8a95a7;
+  --smet-gris-claro: #d1d1d1;
+
+  --smet-neutral-darkest: #000000;
+  --smet-neutral-dark: #222222;
+  --smet-neutral: #666666;
+  --smet-neutral-light: #aaaaaa;
+  --smet-neutral-lighter: #cccccc;
+  --smet-neutral-lightest: #eeeeee;
+
+  --smet-success: #16ac18;
+  --smet-focus: #3898ec;
+  --smet-error: #c8573c;
+
+  --smet-font-sans: "Alliance No", Arial, sans-serif;
+
+  --smet-radius-sm: 0.25rem;
+  --smet-radius-pill: 100px;
+
+  --smet-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --smet-shadow-md: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --smet-shadow-card: 0 4px 8px -2px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --smet-shadow-lg: 0 20px 24px -4px rgba(0, 0, 0, 0.08), 0 8px 8px -4px rgba(0, 0, 0, 0.03);
+
+  --smet-ease: cubic-bezier(0.645, 0.045, 0.355, 1);
+}
