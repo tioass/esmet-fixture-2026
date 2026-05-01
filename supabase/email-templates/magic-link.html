@@ -1,0 +1,50 @@
+<!--
+  Magic Link email — ESMET Fixture Mundial 2026
+  Pegar el body de este archivo en: Supabase → Authentication → Email Templates → Magic Link
+
+  Subject sugerido:
+    Tu link para entrar al Fixture del Mundial 2026
+-->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f4f4;padding:32px 16px;font-family:Arial,sans-serif;color:#0d0d0d;">
+  <tr>
+    <td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;border:1px solid #cccccc;border-radius:4px;padding:32px;max-width:100%;">
+        <tr>
+          <td style="font-size:14px;color:#666666;text-transform:uppercase;letter-spacing:0.05em;">
+            ESMET · Fixture Mundial 2026
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:16px;font-size:22px;font-weight:500;line-height:1.2;color:#0d0d0d;">
+            ¡Hola!
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:16px;font-size:16px;line-height:1.5;color:#222222;">
+            Hacé click en el botón para entrar al <strong>Fixture del Mundial 2026</strong> y completar tus predicciones:
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:24px;" align="left">
+            <a href="{{ .ConfirmationURL }}"
+               style="display:inline-block;background:#0d0d0d;color:#f4f4f4;padding:12px 24px;border-radius:4px;text-decoration:none;font-weight:500;font-size:16px;">
+              Entrar al fixture
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:24px;font-size:13px;color:#666666;line-height:1.5;">
+            El link sirve por una sola vez y expira en 1 hora.<br>
+            Si no pediste este link, podés ignorar este mail tranquilo.
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:24px;border-top:1px solid #eeeeee;font-size:12px;color:#aaaaaa;line-height:1.5;">
+            ¿El botón no funciona? Copiá y pegá este link en tu navegador:<br>
+            <span style="color:#666666;word-break:break-all;">{{ .ConfirmationURL }}</span>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
