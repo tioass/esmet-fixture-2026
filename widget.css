@@ -192,25 +192,94 @@
 .esmet-fixture .esmet-leaderboard tr.esmet-me { background: rgba(200, 87, 60, 0.08); font-weight: 500; }
 .esmet-fixture .esmet-leaderboard .esmet-rank { font-weight: 500; }
 
-/* ─────── Header / topbar ─────── */
-.esmet-fixture .esmet-topbar {
+/* ─────── Title / userbar / footer ─────── */
+.esmet-fixture .esmet-title {
+  margin: 0 0 1rem;
+  font-size: 2rem;
+}
+.esmet-fixture .esmet-userbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
+  gap: 0.75rem 1.25rem;
+  padding: 0.75rem 0 1rem;
   border-bottom: 1px solid var(--esmet-neutral-lighter);
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
 }
-.esmet-fixture .esmet-topbar__user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.95rem; }
-.esmet-fixture .esmet-topbar__points {
+.esmet-fixture .esmet-userbar__greeting { color: var(--esmet-neutral-dark); }
+.esmet-fixture .esmet-userbar__points {
   background: var(--esmet-black);
   color: var(--esmet-white);
   padding: 0.3rem 0.75rem;
   border-radius: var(--esmet-radius-pill);
   font-size: 0.875rem;
   font-weight: 500;
+}
+.esmet-fixture .esmet-link {
+  background: none;
+  border: none;
+  color: var(--esmet-rojo);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+}
+.esmet-fixture .esmet-link:hover { text-decoration: underline; }
+
+.esmet-fixture .esmet-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--esmet-neutral-lighter);
+  text-align: center;
+}
+
+/* ─────── Modal ─────── */
+.esmet-fixture .esmet-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.esmet-fixture .esmet-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 13, 13, 0.6);
+}
+.esmet-fixture .esmet-modal__panel {
+  position: relative;
+  background: #fff;
+  border-radius: var(--esmet-radius-sm);
+  max-width: 640px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 2rem 1.5rem 1.5rem;
+  box-shadow: var(--esmet-shadow-lg);
+}
+.esmet-fixture .esmet-modal__close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  background: transparent;
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--esmet-neutral);
+  border-radius: var(--esmet-radius-sm);
+}
+.esmet-fixture .esmet-modal__close:hover {
+  color: var(--esmet-black);
+  background: var(--esmet-neutral-lightest);
 }
 
 /* ─────── States ─────── */

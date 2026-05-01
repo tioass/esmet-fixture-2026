@@ -9,6 +9,8 @@
  *
  * Punto de montaje:  <div id="esmet-fixture"></div>
  */
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/+esm";
+
 (function () {
   const cfg = window.ESMET_FIXTURE_CONFIG;
   if (!cfg || !cfg.supabaseUrl || !cfg.supabaseAnonKey) {
@@ -35,11 +37,14 @@
     bonus: null,
     leaderboard: [],
     totalPoints: 0,
-    activeTab: null, // "A".."L" | "knockout" | "bonus" | "leaderboard"
+    activeTab: null, // "A".."L" | "knockout" | "bonus"
     flash: null, // { type: "success"|"error", text }
     saving: new Set(), // match ids saving
+    modalOpen: null, // null | "leaderboard"
     redirectUrl: window.location.href.split("#")[0],
   };
+
+  const firstName = (full) => (full ?? "").trim().split(/\s+/)[0] || "vos";
 
   // ───────────────────── Helpers ─────────────────────
   const fmtDate = (iso) => {
@@ -73,8 +78,7 @@
 
   // ───────────────────── Init ─────────────────────
   async function init() {
-    const mod = await import("https://esm.sh/@supabase/supabase-js@2.45.0");
-    state.supabase = mod.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
+    state.supabase = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     });
 
@@ -285,7 +289,7 @@
     const flash = renderFlash();
     return `
       <div class="esmet-auth">
-        <h1>Fixture del Mundial 2026</h1>
+        <h1>Fixture Esmet 2026</h1>
         <p>Predeci los marcadores, sumá puntos y peleá la cima del ranking.</p>
         ${flash}
         <form data-form="auth">
@@ -311,11 +315,11 @@
       ...groups.map((g) => ({ id: g, label: `Grupo ${g}` })),
       ...(hasKnockout ? [{ id: "knockout", label: "Eliminatorias" }] : []),
       { id: "bonus", label: "Bonus" },
-      { id: "leaderboard", label: "Ranking" },
     ];
 
     return `
-      ${renderTopbar()}
+      <h1 class="esmet-title">Fixture Esmet 2026</h1>
+      ${renderUserbar()}
       ${renderFlash()}
       <div class="esmet-tabs" role="tablist">
         ${tabs
@@ -329,17 +333,38 @@
           .join("")}
       </div>
       ${renderTabContent()}
+      ${renderFooter()}
+      ${renderModal()}
     `;
   }
 
-  function renderTopbar() {
+  function renderUserbar() {
     return `
-      <div class="esmet-topbar">
-        <h2 style="margin:0;font-size:1.25rem;">Fixture del Mundial 2026</h2>
-        <div class="esmet-topbar__user">
-          <span>${escape(state.profile?.name ?? "Hola")}</span>
-          <span class="esmet-topbar__points">${state.totalPoints} pts</span>
-          <button class="esmet-btn esmet-btn--secondary esmet-btn--small" data-action="signout">Salir</button>
+      <div class="esmet-userbar">
+        <span class="esmet-userbar__greeting">Hola, <strong>${escape(firstName(state.profile?.name))}</strong></span>
+        <span class="esmet-userbar__points">${state.totalPoints} pts</span>
+        <button class="esmet-link" data-action="open-leaderboard">Ver ranking →</button>
+      </div>
+    `;
+  }
+
+  function renderFooter() {
+    return `
+      <div class="esmet-footer">
+        <button class="esmet-btn esmet-btn--secondary esmet-btn--small" data-action="signout">Salir</button>
+      </div>
+    `;
+  }
+
+  function renderModal() {
+    if (state.modalOpen !== "leaderboard") return "";
+    return `
+      <div class="esmet-modal" data-modal>
+        <div class="esmet-modal__backdrop" data-modal-close></div>
+        <div class="esmet-modal__panel" role="dialog" aria-modal="true" aria-label="Ranking">
+          <button class="esmet-modal__close" data-modal-close aria-label="Cerrar">×</button>
+          <h2 style="margin-bottom:1rem;">Ranking</h2>
+          ${renderLeaderboard()}
         </div>
       </div>
     `;
@@ -352,7 +377,6 @@
   }
 
   function renderTabContent() {
-    if (state.activeTab === "leaderboard") return renderLeaderboard();
     if (state.activeTab === "bonus") return renderBonus();
     const tabMatches =
       state.activeTab === "knockout"
@@ -560,6 +584,18 @@
     });
     root.querySelectorAll('[data-action="save-bonus"]').forEach((b) => {
       b.addEventListener("click", saveBonus);
+    });
+    root.querySelectorAll('[data-action="open-leaderboard"]').forEach((b) => {
+      b.addEventListener("click", () => {
+        state.modalOpen = "leaderboard";
+        render();
+      });
+    });
+    root.querySelectorAll("[data-modal-close]").forEach((el) => {
+      el.addEventListener("click", () => {
+        state.modalOpen = null;
+        render();
+      });
     });
     // Auto-save de predicciones con debounce por partido
     const debounce = new Map();
