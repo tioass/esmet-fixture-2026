@@ -9,8 +9,6 @@
  *
  * Punto de montaje:  <div id="esmet-fixture"></div>
  */
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/+esm";
-
 (function () {
   const cfg = window.ESMET_FIXTURE_CONFIG;
   if (!cfg || !cfg.supabaseUrl || !cfg.supabaseAnonKey) {
@@ -77,8 +75,24 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   }
 
   // ───────────────────── Init ─────────────────────
+  function loadSupabase() {
+    if (window.supabase?.createClient) return Promise.resolve(window.supabase);
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js";
+      s.async = true;
+      s.onload = () =>
+        window.supabase?.createClient
+          ? resolve(window.supabase)
+          : reject(new Error("supabase-js cargó pero no expone createClient"));
+      s.onerror = () => reject(new Error("no se pudo cargar supabase-js (¿conexión?)"));
+      document.head.appendChild(s);
+    });
+  }
+
   async function init() {
-    state.supabase = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
+    const sb = await loadSupabase();
+    state.supabase = sb.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     });
 
