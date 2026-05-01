@@ -5,11 +5,14 @@
   URLs donde se embebe:
     - Staging:    https://esmet-2025.webflow.io/fixture-esmet-mundial-2026
     - Producción: https://www.esmet.com.ar/fixture-esmet-mundial-2026
-  No editar las URLs de jsDelivr: apuntan al repo y se actualizan solas cuando
-  hagamos cambios en GitHub.
+
+  Nota sobre versionado:
+  Las URLs apuntan a un commit SHA específico (no a "@main") para evitar el
+  caché de 12h que tiene jsDelivr cuando se usa "@main". Cada vez que haya
+  un cambio, hay que re-copiar este bloque (la SHA se actualiza acá en el repo).
 -->
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/tioass/esmet-fixture-2026@main/widget.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/tioass/esmet-fixture-2026@02ff31d/widget.css">
 
 <div id="esmet-fixture"></div>
 
@@ -19,4 +22,4 @@
     supabaseAnonKey: "sb_publishable_TqdcUL3SzYuVmNp42MJS1g_t1fseSum"
   };
 </script>
-<script type="module" src="https://cdn.jsdelivr.net/gh/tioass/esmet-fixture-2026@main/widget.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/tioass/esmet-fixture-2026@02ff31d/widget.js"></script>
