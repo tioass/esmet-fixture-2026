@@ -1,4 +1,4 @@
--- SMET Fixture Mundial — Supabase schema
+-- ESMET Fixture Mundial — Supabase schema
 -- Ejecutar en SQL Editor de Supabase. Idempotente: se puede correr varias veces.
 
 -- ─────────────────────────────────────────────
@@ -108,7 +108,7 @@ drop policy if exists "matches_select_all" on matches;
 create policy "matches_select_all" on matches
   for select using (auth.role() = 'authenticated');
 
--- Predictions: cualquiera ve picks de cualquiera (transparencia tipo polla).
+-- Predictions: cualquiera ve picks de cualquiera (transparencia tipo fixture).
 -- Solo el dueño escribe, y solo si el partido NO empezó.
 drop policy if exists "predictions_select_all" on predictions;
 create policy "predictions_select_all" on predictions

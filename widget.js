@@ -1,28 +1,28 @@
 /**
- * SMET Fixture Mundial 2026 — widget embebible
+ * ESMET Fixture Mundial 2026 — widget embebible
  *
  * Configuración (definir antes de cargar este script en el embed de Webflow):
- *   window.SMET_FIXTURE_CONFIG = {
+ *   window.ESMET_FIXTURE_CONFIG = {
  *     supabaseUrl: "https://xxx.supabase.co",
  *     supabaseAnonKey: "eyJ...",
  *   };
  *
- * Punto de montaje:  <div id="smet-fixture"></div>
+ * Punto de montaje:  <div id="esmet-fixture"></div>
  */
 (function () {
-  const cfg = window.SMET_FIXTURE_CONFIG;
+  const cfg = window.ESMET_FIXTURE_CONFIG;
   if (!cfg || !cfg.supabaseUrl || !cfg.supabaseAnonKey) {
-    console.error("[smet-fixture] falta SMET_FIXTURE_CONFIG (supabaseUrl, supabaseAnonKey)");
+    console.error("[esmet-fixture] falta ESMET_FIXTURE_CONFIG (supabaseUrl, supabaseAnonKey)");
     return;
   }
 
-  const root = document.getElementById("smet-fixture");
+  const root = document.getElementById("esmet-fixture");
   if (!root) {
-    console.error("[smet-fixture] no se encontró <div id='smet-fixture'>");
+    console.error("[esmet-fixture] no se encontró <div id='esmet-fixture'>");
     return;
   }
-  root.classList.add("smet-fixture");
-  root.innerHTML = '<div class="smet-loading">Cargando…</div>';
+  root.classList.add("esmet-fixture");
+  root.innerHTML = '<div class="esmet-loading">Cargando…</div>';
 
   // ───────────────────── Estado ─────────────────────
   const state = {
@@ -106,7 +106,7 @@
 
   // ───────────────────── Data loading ─────────────────────
   async function loadAppData() {
-    root.innerHTML = '<div class="smet-loading">Cargando fixture…</div>';
+    root.innerHTML = '<div class="esmet-loading">Cargando fixture…</div>';
     const sb = state.supabase;
     const uid = state.session.user.id;
 
@@ -140,7 +140,7 @@
     await loadLeaderboard();
 
     // Realtime: cambios en partidos (status/score) y en predictions globales (para leaderboard)
-    sb.channel("smet-matches")
+    sb.channel("esmet-matches")
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "matches" }, (p) => {
         const idx = state.matches.findIndex((m) => m.id === p.new.id);
         if (idx >= 0) {
@@ -150,7 +150,7 @@
       })
       .subscribe();
 
-    sb.channel("smet-predictions")
+    sb.channel("esmet-predictions")
       .on("postgres_changes", { event: "*", schema: "public", table: "predictions" }, () => {
         loadLeaderboard();
       })
@@ -284,21 +284,21 @@
   function renderAuth() {
     const flash = renderFlash();
     return `
-      <div class="smet-auth">
-        <h1>Polla del Mundial 2026</h1>
+      <div class="esmet-auth">
+        <h1>Fixture del Mundial 2026</h1>
         <p>Predeci los marcadores, sumá puntos y peleá la cima del ranking.</p>
         ${flash}
         <form data-form="auth">
-          <div class="smet-field">
-            <label for="smet-name">Nombre</label>
-            <input class="smet-input" id="smet-name" name="name" type="text" required autocomplete="name" placeholder="Juan Pérez">
+          <div class="esmet-field">
+            <label for="esmet-name">Nombre</label>
+            <input class="esmet-input" id="esmet-name" name="name" type="text" required autocomplete="name" placeholder="Juan Pérez">
           </div>
-          <div class="smet-field">
-            <label for="smet-email">Email</label>
-            <input class="smet-input" id="smet-email" name="email" type="email" required autocomplete="email" placeholder="vos@ejemplo.com">
+          <div class="esmet-field">
+            <label for="esmet-email">Email</label>
+            <input class="esmet-input" id="esmet-email" name="email" type="email" required autocomplete="email" placeholder="vos@ejemplo.com">
           </div>
-          <button class="smet-btn" type="submit">Enviame el link</button>
-          <p style="margin-top:1rem;font-size:.8rem;color:var(--smet-neutral);">Te mandamos un link mágico al mail. Sin contraseñas.</p>
+          <button class="esmet-btn" type="submit">Enviame el link</button>
+          <p style="margin-top:1rem;font-size:.8rem;color:var(--esmet-neutral);">Te mandamos un link mágico al mail. Sin contraseñas.</p>
         </form>
       </div>
     `;
@@ -317,11 +317,11 @@
     return `
       ${renderTopbar()}
       ${renderFlash()}
-      <div class="smet-tabs" role="tablist">
+      <div class="esmet-tabs" role="tablist">
         ${tabs
           .map(
             (t) => `
-          <button class="smet-tab" role="tab" aria-selected="${state.activeTab === t.id}" data-tab="${t.id}">
+          <button class="esmet-tab" role="tab" aria-selected="${state.activeTab === t.id}" data-tab="${t.id}">
             ${escape(t.label)}
           </button>
         `
@@ -334,12 +334,12 @@
 
   function renderTopbar() {
     return `
-      <div class="smet-topbar">
-        <h2 style="margin:0;font-size:1.25rem;">Polla del Mundial 2026</h2>
-        <div class="smet-topbar__user">
+      <div class="esmet-topbar">
+        <h2 style="margin:0;font-size:1.25rem;">Fixture del Mundial 2026</h2>
+        <div class="esmet-topbar__user">
           <span>${escape(state.profile?.name ?? "Hola")}</span>
-          <span class="smet-topbar__points">${state.totalPoints} pts</span>
-          <button class="smet-btn smet-btn--secondary smet-btn--small" data-action="signout">Salir</button>
+          <span class="esmet-topbar__points">${state.totalPoints} pts</span>
+          <button class="esmet-btn esmet-btn--secondary esmet-btn--small" data-action="signout">Salir</button>
         </div>
       </div>
     `;
@@ -347,7 +347,7 @@
 
   function renderFlash() {
     if (!state.flash) return "";
-    const cls = state.flash.type === "error" ? "smet-error" : "smet-success-msg";
+    const cls = state.flash.type === "error" ? "esmet-error" : "esmet-success-msg";
     return `<div class="${cls}">${escape(state.flash.text)}</div>`;
   }
 
@@ -363,7 +363,7 @@
 
   function renderMatchList(list) {
     if (list.length === 0) {
-      return '<div class="smet-empty">Todavía no hay partidos cargados para esta fase.</div>';
+      return '<div class="esmet-empty">Todavía no hay partidos cargados para esta fase.</div>';
     }
     // Agrupar por round_label
     const groups = new Map();
@@ -375,10 +375,10 @@
     return [...groups.entries()]
       .map(
         ([label, ms]) => `
-      <h3 style="margin-top:2rem;margin-bottom:.75rem;font-size:1rem;color:var(--smet-neutral-dark);text-transform:uppercase;letter-spacing:.05em;">${escape(
+      <h3 style="margin-top:2rem;margin-bottom:.75rem;font-size:1rem;color:var(--esmet-neutral-dark);text-transform:uppercase;letter-spacing:.05em;">${escape(
         label
       )}</h3>
-      <div class="smet-match-list">
+      <div class="esmet-match-list">
         ${ms.map(renderMatch).join("")}
       </div>
     `
@@ -401,23 +401,23 @@
 
     let statusBlock = "";
     if (live) {
-      statusBlock = `<div class="smet-match__status smet-match__status--live">
+      statusBlock = `<div class="esmet-match__status esmet-match__status--live">
         <span>● EN VIVO &nbsp;${escape(m.home_score ?? 0)}-${escape(m.away_score ?? 0)}</span>
       </div>`;
     } else if (finished) {
       const pts = pred?.points_awarded;
       const ptsBadge =
         pts != null
-          ? `<span class="smet-match__points ${pts === 0 ? "smet-match__points--zero" : ""}">${pts} pts</span>`
+          ? `<span class="esmet-match__points ${pts === 0 ? "esmet-match__points--zero" : ""}">${pts} pts</span>`
           : "";
-      statusBlock = `<div class="smet-match__status">
-        <span class="smet-match__final">Final: ${escape(m.home_score)}-${escape(m.away_score)}</span>
+      statusBlock = `<div class="esmet-match__status">
+        <span class="esmet-match__final">Final: ${escape(m.home_score)}-${escape(m.away_score)}</span>
         ${ptsBadge}
       </div>`;
     } else if (locked) {
-      statusBlock = `<div class="smet-match__status">Cerrado</div>`;
+      statusBlock = `<div class="esmet-match__status">Cerrado</div>`;
     } else {
-      statusBlock = `<div class="smet-match__status">
+      statusBlock = `<div class="esmet-match__status">
         <span>${escape(fmtDate(m.kickoff_at))}</span>
         ${saving ? "<span>Guardando…</span>" : pred ? "<span>✓ Predicción guardada</span>" : ""}
       </div>`;
@@ -427,20 +427,20 @@
     const awayVal = pred?.away_score ?? "";
 
     return `
-      <div class="smet-match ${locked ? "smet-match--locked" : ""}" data-match-card="${m.id}">
-        <div class="smet-match__meta">
+      <div class="esmet-match ${locked ? "esmet-match--locked" : ""}" data-match-card="${m.id}">
+        <div class="esmet-match__meta">
           <span>${escape(m.stage)}${m.group_letter ? ` · Grupo ${m.group_letter}` : ""}</span>
           <span>${escape(fmtDate(m.kickoff_at))}</span>
         </div>
-        <div class="smet-match__team">${flag(home)}<span>${teamName(home)}</span></div>
-        <div class="smet-match__scores">
-          <input class="smet-input" type="number" min="0" max="20" inputmode="numeric"
+        <div class="esmet-match__team">${flag(home)}<span>${teamName(home)}</span></div>
+        <div class="esmet-match__scores">
+          <input class="esmet-input" type="number" min="0" max="20" inputmode="numeric"
                  value="${homeVal}" data-pred="home" data-match="${m.id}" ${locked ? "disabled" : ""} aria-label="Goles ${teamName(home)}">
-          <span class="smet-match__sep">vs</span>
-          <input class="smet-input" type="number" min="0" max="20" inputmode="numeric"
+          <span class="esmet-match__sep">vs</span>
+          <input class="esmet-input" type="number" min="0" max="20" inputmode="numeric"
                  value="${awayVal}" data-pred="away" data-match="${m.id}" ${locked ? "disabled" : ""} aria-label="Goles ${teamName(away)}">
         </div>
-        <div class="smet-match__team smet-match__team--away"><span>${teamName(away)}</span>${flag(away)}</div>
+        <div class="esmet-match__team esmet-match__team--away"><span>${teamName(away)}</span>${flag(away)}</div>
         ${statusBlock}
       </div>
     `;
@@ -460,16 +460,16 @@
     const champPts = state.bonus?.points_awarded;
 
     return `
-      <div class="smet-bonus">
+      <div class="esmet-bonus">
         <h3>Picks bonus</h3>
-        <p style="color:var(--smet-neutral);font-size:.9rem;">
+        <p style="color:var(--esmet-neutral);font-size:.9rem;">
           Campeón: 10 pts · Finalista: 5 pts.
           ${closed ? "Las predicciones bonus están cerradas." : "Podés modificar hasta el primer partido del Mundial."}
         </p>
-        <div class="smet-bonus__grid">
-          <div class="smet-field">
+        <div class="esmet-bonus__grid">
+          <div class="esmet-field">
             <label>Campeón</label>
-            <select class="smet-input" data-bonus="champion" ${closed ? "disabled" : ""}>
+            <select class="esmet-input" data-bonus="champion" ${closed ? "disabled" : ""}>
               <option value="">Elegí un equipo…</option>
               ${state.teams
                 .slice()
@@ -481,9 +481,9 @@
                 .join("")}
             </select>
           </div>
-          <div class="smet-field">
+          <div class="esmet-field">
             <label>Finalista (subcampeón)</label>
-            <select class="smet-input" data-bonus="runner_up" ${closed ? "disabled" : ""}>
+            <select class="esmet-input" data-bonus="runner_up" ${closed ? "disabled" : ""}>
               <option value="">Elegí un equipo…</option>
               ${state.teams
                 .slice()
@@ -501,7 +501,7 @@
             ? champPts != null
               ? `<p style="margin-top:1rem;"><strong>Bonus obtenidos:</strong> ${champPts} pts.</p>`
               : ""
-            : `<button class="smet-btn" data-action="save-bonus" style="margin-top:1rem;">Guardar bonus</button>`
+            : `<button class="esmet-btn" data-action="save-bonus" style="margin-top:1rem;">Guardar bonus</button>`
         }
       </div>
     `;
@@ -509,11 +509,11 @@
 
   function renderLeaderboard() {
     if (state.leaderboard.length === 0) {
-      return '<div class="smet-empty">Todavía no hay puntajes cargados.</div>';
+      return '<div class="esmet-empty">Todavía no hay puntajes cargados.</div>';
     }
     const myId = state.session.user.id;
     return `
-      <div class="smet-leaderboard">
+      <div class="esmet-leaderboard">
         <table>
           <thead>
             <tr>
@@ -527,8 +527,8 @@
             ${state.leaderboard
               .map(
                 (row, i) => `
-              <tr class="${row.user_id === myId ? "smet-me" : ""}">
-                <td class="smet-rank">${i + 1}</td>
+              <tr class="${row.user_id === myId ? "esmet-me" : ""}">
+                <td class="esmet-rank">${i + 1}</td>
                 <td>${escape(row.name)}</td>
                 <td>${row.exact_count ?? 0}</td>
                 <td><strong>${row.total_points ?? 0}</strong></td>
@@ -577,6 +577,6 @@
 
   init().catch((err) => {
     console.error(err);
-    root.innerHTML = `<div class="smet-error">Error al iniciar el widget: ${escape(err.message)}</div>`;
+    root.innerHTML = `<div class="esmet-error">Error al iniciar el widget: ${escape(err.message)}</div>`;
   });
 })();
