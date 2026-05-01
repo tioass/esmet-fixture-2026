@@ -25,6 +25,12 @@ function pointsFor(predH: number, predA: number, realH: number, realA: number): 
 }
 
 Deno.serve(async (req) => {
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  const auth = req.headers.get("Authorization") ?? "";
+  if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
+    return new Response("forbidden", { status: 403 });
+  }
+
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
