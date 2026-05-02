@@ -268,13 +268,30 @@
     const sb = await waitForSupabase();
     __initStep = "create-client";
     state.supabase = sb.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        // Bypass del navigator lock que puede colgar getSession en algunos browsers
+        // (issue conocido en supabase-js v2: locks abandonados de tabs cerradas).
+        lock: async (_name, _timeout, fn) => fn(),
+      },
     });
 
     __initStep = "get-session";
-    const { data } = await state.supabase.auth.getSession();
-    __initStep = data?.session ? "post-session-logged" : "post-session-anon";
-    state.session = data.session;
+    // Timeout de 3s: si getSession se cuelga (por problemas de auth/red) tratamos como anon
+    // y dejamos que onAuthStateChange resuelva la sesión más tarde si llega.
+    const sess = await Promise.race([
+      state.supabase.auth.getSession().then((r) => r.data?.session ?? null),
+      new Promise((resolve) => setTimeout(() => resolve("__TIMEOUT__"), 3000)),
+    ]);
+    if (sess === "__TIMEOUT__") {
+      __initStep = "session-timeout-anon";
+      state.session = null;
+    } else {
+      __initStep = sess ? "post-session-logged" : "post-session-anon";
+      state.session = sess;
+    }
 
     state.supabase.auth.onAuthStateChange(async (event, session) => {
       state.session = session;
