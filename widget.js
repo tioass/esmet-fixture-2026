@@ -436,7 +436,21 @@
     state.saving.delete(matchId);
 
     if (error) {
-      setFlash("error", `No se pudo guardar: ${error.message}`);
+      // Diagnostic flash: incluye uid, match_id, válido, todo en el mismo mensaje
+      let diag = "";
+      try {
+        const sess = (await state.supabase.auth.getSession()).data.session;
+        const sUid = sess?.user?.id?.slice(0, 8) || "NULL";
+        const stUid = state.session?.user?.id?.slice(0, 8) || "NULL";
+        const exp = sess?.expires_at ? Math.round((sess.expires_at * 1000 - Date.now()) / 60000) : "?";
+        // Verifica si el match existe en la base (con la sesión actual)
+        const { data: m } = await state.supabase.from("matches").select("id, kickoff_at, status").eq("id", matchId).maybeSingle();
+        const mStatus = m ? `${m.status}, kick=${m.kickoff_at?.slice(0,16)}` : "NOT-FOUND";
+        diag = ` [sUid=${sUid} stUid=${stUid} expMin=${exp} mid=${matchId} m=${mStatus}]`;
+      } catch (e) {
+        diag = ` [diag-err: ${e.message}]`;
+      }
+      setFlash("error", `No se pudo guardar: ${error.message}${diag}`);
       return;
     }
     state.predictions.set(matchId, data);
