@@ -245,6 +245,8 @@
 
   async function init() {
     if (IS_DEV) {
+      // Saltea login en dev: carga mock data directamente y muestra el fixture
+      loadMockData();
       render();
       return;
     }
@@ -638,7 +640,7 @@
       if (!el) return;
       if (window.Odometer) {
         if (!el._odo) {
-          el._odo = new window.Odometer({ el, value: val, format: "d", duration: 800 });
+          el._odo = new window.Odometer({ el, value: val, format: "d", duration: 680 });
         } else {
           el._odo.update(val);
         }
