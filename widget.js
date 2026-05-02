@@ -640,7 +640,7 @@
       if (!el) return;
       if (window.Odometer) {
         if (!el._odo) {
-          el._odo = new window.Odometer({ el, value: val, format: "d", duration: 680 });
+          el._odo = new window.Odometer({ el, value: val, format: "d", duration: 400 });
         } else {
           el._odo.update(val);
         }
