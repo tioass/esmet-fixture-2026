@@ -125,9 +125,14 @@
 /* ─────── Match card ─────── */
 .esmet-fixture .esmet-match {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas:
+    "meta meta meta meta meta"
+    "home sH   vs   sA   away"
+    "status status status status status";
+  grid-template-columns: 1fr auto auto auto 1fr;
   align-items: center;
-  gap: 0.75rem;
+  column-gap: 0.5rem;
+  row-gap: 0.5rem;
   background: #fff;
   border: 1px solid var(--esmet-neutral-lighter);
   border-radius: var(--esmet-radius-sm);
@@ -140,32 +145,45 @@
 .esmet-fixture .esmet-match--locked .esmet-input { background: var(--esmet-neutral-lightest); }
 
 .esmet-fixture .esmet-match__meta {
-  grid-column: 1 / -1;
+  grid-area: meta;
   display: flex;
   justify-content: space-between;
   font-size: 0.75rem;
   color: var(--esmet-neutral);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 .esmet-fixture .esmet-match__team {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.95rem;
+  min-width: 0;
 }
-.esmet-fixture .esmet-match__team--away { justify-content: flex-end; }
-.esmet-fixture .esmet-match__team img { width: 28px; height: 20px; object-fit: cover; border-radius: 2px; }
-.esmet-fixture .esmet-match__scores { display: flex; align-items: center; gap: 0.4rem; }
-.esmet-fixture .esmet-match__scores .esmet-input { width: 3rem; text-align: center; padding: 0.4rem; font-weight: 500; }
-.esmet-fixture .esmet-match__scores .esmet-input:disabled { color: var(--esmet-neutral); }
-.esmet-fixture .esmet-match__sep { color: var(--esmet-neutral); font-size: 0.875rem; }
+.esmet-fixture .esmet-match__team img { width: 28px; height: 20px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+.esmet-fixture .esmet-match__team--home { grid-area: home; justify-self: end; }
+.esmet-fixture .esmet-match__team--away { grid-area: away; justify-self: start; }
+.esmet-fixture .esmet-match__score {
+  text-align: center;
+  padding: 0.4rem;
+  font-weight: 500;
+  width: 3rem;
+}
+.esmet-fixture .esmet-match__score--home { grid-area: sH; }
+.esmet-fixture .esmet-match__score--away { grid-area: sA; }
+.esmet-fixture .esmet-match__score:disabled { color: var(--esmet-neutral); }
+.esmet-fixture .esmet-match__sep {
+  grid-area: vs;
+  color: var(--esmet-neutral);
+  font-size: 0.875rem;
+  user-select: none;
+}
 .esmet-fixture .esmet-match__status {
-  grid-column: 1 / -1;
+  grid-area: status;
   font-size: 0.75rem;
   color: var(--esmet-neutral);
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -369,8 +387,43 @@
 @media (max-width: 600px) {
   .esmet-fixture { padding: 1rem 0.75rem; }
   .esmet-fixture h1 { font-size: 1.875rem; }
-  .esmet-fixture .esmet-match__team { font-size: 0.85rem; }
-  .esmet-fixture .esmet-match__team img { width: 22px; height: 16px; }
   .esmet-fixture .esmet-leaderboard th,
   .esmet-fixture .esmet-leaderboard td { padding: 0.6rem 0.5rem; font-size: 0.875rem; }
+
+  /* Match card mobile: nombre arriba, input grande abajo */
+  .esmet-fixture .esmet-match {
+    grid-template-areas:
+      "meta   meta   meta"
+      "home   .      away"
+      "sH     vs     sA"
+      "status status status";
+    grid-template-columns: 1fr auto 1fr;
+    column-gap: 0.75rem;
+    row-gap: 0.75rem;
+    padding: 1rem 0.75rem;
+  }
+  .esmet-fixture .esmet-match__team {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+    line-height: 1.2;
+    word-break: keep-all;
+  }
+  .esmet-fixture .esmet-match__team--home,
+  .esmet-fixture .esmet-match__team--away { justify-self: center; }
+  .esmet-fixture .esmet-match__team img { width: 36px; height: 24px; }
+  .esmet-fixture .esmet-match__score {
+    width: 100%;
+    max-width: 5rem;
+    height: 3rem;
+    font-size: 1.5rem;
+    padding: 0.3rem;
+    justify-self: center;
+  }
+  .esmet-fixture .esmet-match__sep {
+    align-self: center;
+    font-size: 0.75rem;
+    color: var(--esmet-neutral-light);
+  }
 }

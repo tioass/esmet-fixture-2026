@@ -715,14 +715,12 @@
           <span>${escape(m.stage)}${m.group_letter ? ` · Grupo ${m.group_letter}` : ""}</span>
           <span>${escape(fmtDate(m.kickoff_at))}</span>
         </div>
-        <div class="esmet-match__team">${flag(home)}<span>${teamName(home)}</span></div>
-        <div class="esmet-match__scores">
-          <input class="esmet-input" type="number" min="0" max="20" inputmode="numeric"
-                 value="${homeVal}" data-pred="home" data-match="${m.id}" ${locked ? "disabled" : ""} aria-label="Goles ${teamName(home)}">
-          <span class="esmet-match__sep">vs</span>
-          <input class="esmet-input" type="number" min="0" max="20" inputmode="numeric"
-                 value="${awayVal}" data-pred="away" data-match="${m.id}" ${locked ? "disabled" : ""} aria-label="Goles ${teamName(away)}">
-        </div>
+        <div class="esmet-match__team esmet-match__team--home">${flag(home)}<span>${teamName(home)}</span></div>
+        <input class="esmet-input esmet-match__score esmet-match__score--home" type="number" min="0" max="20" inputmode="numeric"
+               value="${homeVal}" data-pred="home" data-match="${m.id}" ${locked ? "disabled" : ""} aria-label="Goles ${teamName(home)}">
+        <span class="esmet-match__sep" aria-hidden="true">vs</span>
+        <input class="esmet-input esmet-match__score esmet-match__score--away" type="number" min="0" max="20" inputmode="numeric"
+               value="${awayVal}" data-pred="away" data-match="${m.id}" ${locked ? "disabled" : ""} aria-label="Goles ${teamName(away)}">
         <div class="esmet-match__team esmet-match__team--away"><span>${teamName(away)}</span>${flag(away)}</div>
         ${statusBlock}
       </div>
