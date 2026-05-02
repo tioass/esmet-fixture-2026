@@ -712,7 +712,6 @@
     return `
       <div class="esmet-match ${locked ? "esmet-match--locked" : ""}" data-match-card="${m.id}">
         <div class="esmet-match__meta">
-          <span>${escape(m.stage)}${m.group_letter ? ` · Grupo ${m.group_letter}` : ""}</span>
           <span>${escape(fmtDate(m.kickoff_at))}</span>
         </div>
         <div class="esmet-match__team esmet-match__team--home">${flag(home)}<span>${teamName(home)}</span></div>
