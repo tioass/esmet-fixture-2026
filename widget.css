@@ -285,6 +285,16 @@
   color: var(--esmet-black);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  display: inline-flex;
+  gap: 0;
+}
+/* Cero margen entre las 2 instancias de odometer (decenas y unidades) */
+.esmet-fixture .esmet-countdown__digit {
+  display: inline-block;
+}
+.esmet-fixture .esmet-countdown__digit + .esmet-countdown__digit,
+.esmet-fixture .esmet-countdown__num .odometer + .odometer {
+  margin-left: 0;
 }
 .esmet-fixture .esmet-countdown__label {
   font-size: 0.7rem;

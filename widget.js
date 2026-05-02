@@ -609,33 +609,29 @@
 
   function renderCountdown() {
     if (Date.now() >= TOURNAMENT_START_MS) return ""; // post-Mundial: nada
+    const cell = (unit, label) => `
+      <div class="esmet-countdown__cell">
+        <span class="esmet-countdown__num">
+          <span class="esmet-countdown__digit" data-cd="${unit}-tens">0</span><span class="esmet-countdown__digit" data-cd="${unit}-ones">0</span>
+        </span>
+        <span class="esmet-countdown__label">${label}</span>
+      </div>
+    `;
     return `
       <div class="esmet-countdown" data-countdown>
         <div class="esmet-countdown__caption">Faltan para el Mundial</div>
         <div class="esmet-countdown__grid">
-          <div class="esmet-countdown__cell">
-            <span class="esmet-countdown__num" data-cd="days">0</span>
-            <span class="esmet-countdown__label">Días</span>
-          </div>
-          <div class="esmet-countdown__cell">
-            <span class="esmet-countdown__num" data-cd="hours">0</span>
-            <span class="esmet-countdown__label">Horas</span>
-          </div>
-          <div class="esmet-countdown__cell">
-            <span class="esmet-countdown__num" data-cd="minutes">0</span>
-            <span class="esmet-countdown__label">Min</span>
-          </div>
-          <div class="esmet-countdown__cell">
-            <span class="esmet-countdown__num" data-cd="seconds">0</span>
-            <span class="esmet-countdown__label">Seg</span>
-          </div>
+          ${cell("days", "Días")}
+          ${cell("hours", "Horas")}
+          ${cell("minutes", "Min")}
+          ${cell("seconds", "Seg")}
         </div>
       </div>
     `;
   }
 
   function startCountdown() {
-    const setVal = (key, val) => {
+    const setDigit = (key, val) => {
       const el = root.querySelector(`[data-cd="${key}"]`);
       if (!el) return;
       if (window.Odometer) {
@@ -648,6 +644,11 @@
         el.textContent = val;
       }
     };
+    const setUnit = (key, val) => {
+      // Siempre 2 dígitos: 7 → "07"
+      setDigit(`${key}-tens`, Math.floor(val / 10));
+      setDigit(`${key}-ones`, val % 10);
+    };
     const tick = () => {
       const diff = TOURNAMENT_START_MS - Date.now();
       if (diff <= 0) {
@@ -658,10 +659,10 @@
         if (root.querySelector("[data-countdown]")) render();
         return;
       }
-      setVal("days", Math.floor(diff / 86400000));
-      setVal("hours", Math.floor((diff / 3600000) % 24));
-      setVal("minutes", Math.floor((diff / 60000) % 60));
-      setVal("seconds", Math.floor((diff / 1000) % 60));
+      setUnit("days", Math.floor(diff / 86400000));
+      setUnit("hours", Math.floor((diff / 3600000) % 24));
+      setUnit("minutes", Math.floor((diff / 60000) % 60));
+      setUnit("seconds", Math.floor((diff / 1000) % 60));
     };
     tick();
     if (state.countdownInterval) clearInterval(state.countdownInterval);
