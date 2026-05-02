@@ -55,6 +55,37 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
+  // Early-exit: si ya sincronizamos hace poco, evitar llamadas innecesarias a ESPN.
+  // Pre-Mundial / Post-Mundial: 1 vez cada 24h. Durante el Mundial: 1 vez cada 5 min.
+  const url = new URL(req.url);
+  const force = url.searchParams.get("force") === "1";
+  if (!force) {
+    const now = Date.now();
+    const tournamentStart = Date.parse("2026-06-04T00:00:00Z"); // ~1 semana antes del kickoff
+    const tournamentEnd = Date.parse("2026-07-20T00:00:00Z");
+    const tournamentActive = now >= tournamentStart && now <= tournamentEnd;
+    const minIntervalMs = tournamentActive ? 5 * 60 * 1000 : 24 * 60 * 60 * 1000;
+
+    const { data: lastRow } = await supabase
+      .from("matches")
+      .select("updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    if (lastRow?.[0]) {
+      const lastSyncedMs = Date.parse(lastRow[0].updated_at);
+      if (now - lastSyncedMs < minIntervalMs) {
+        return new Response(
+          JSON.stringify({
+            skipped: true,
+            reason: tournamentActive ? "synced within last 5min" : "synced within last 24h",
+            last_sync_at: lastRow[0].updated_at,
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
+  }
+
   // 1) Standings → mapa team_id → group_letter
   const standRes = await fetch(STANDINGS_URL);
   if (!standRes.ok) return new Response(`espn standings: ${standRes.status}`, { status: 502 });
