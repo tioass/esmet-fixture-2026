@@ -75,23 +75,26 @@
   }
 
   // ───────────────────── Init ─────────────────────
-  function loadSupabase() {
-    if (window.supabase?.createClient) return Promise.resolve(window.supabase);
+  // supabase-js se carga vía un <script> separado en el embed de Webflow.
+  // Si el embed se rompió, esperamos hasta 8s a que window.supabase aparezca.
+  function waitForSupabase() {
     return new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js";
-      s.async = true;
-      s.onload = () =>
-        window.supabase?.createClient
-          ? resolve(window.supabase)
-          : reject(new Error("supabase-js cargó pero no expone createClient"));
-      s.onerror = () => reject(new Error("no se pudo cargar supabase-js (¿conexión?)"));
-      document.head.appendChild(s);
+      if (window.supabase?.createClient) return resolve(window.supabase);
+      const start = Date.now();
+      const t = setInterval(() => {
+        if (window.supabase?.createClient) {
+          clearInterval(t);
+          resolve(window.supabase);
+        } else if (Date.now() - start > 8000) {
+          clearInterval(t);
+          reject(new Error("supabase-js no cargó en el embed (¿falta el <script> de supabase?)"));
+        }
+      }, 80);
     });
   }
 
   async function init() {
-    const sb = await loadSupabase();
+    const sb = await waitForSupabase();
     state.supabase = sb.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     });
