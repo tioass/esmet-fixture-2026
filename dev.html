@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESMET Fixture — dev local</title>
+  <link rel="stylesheet" href="./widget.css">
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f4f4f4; }
+    .dev-banner {
+      background: #fef3c7;
+      border-bottom: 1px solid #fbbf24;
+      color: #78350f;
+      font-size: 12px;
+      padding: 6px 16px;
+      text-align: center;
+      font-family: ui-monospace, monospace;
+    }
+    .dev-shell { padding: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="dev-banner">
+    DEV LOCAL · supabase prod (datos reales, magic link real) · editá widget.css/widget.js y refrescá
+  </div>
+  <div class="dev-shell">
+    <div id="esmet-fixture"></div>
+  </div>
+
+  <script>
+    window.ESMET_FIXTURE_CONFIG = {
+      supabaseUrl: "https://cmipviyntprasggmudjx.supabase.co",
+      supabaseAnonKey: "sb_publishable_TqdcUL3SzYuVmNp42MJS1g_t1fseSum"
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
+  <script defer src="./widget.js"></script>
+</body>
+</html>
