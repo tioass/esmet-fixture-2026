@@ -495,6 +495,12 @@
 
   // ───────────────────── Render ─────────────────────
   function render() {
+    // Preservar focus + posición del cursor a través de re-renders
+    const ae = document.activeElement;
+    const focusKey = ae && ae.dataset && ae.dataset.pred && ae.dataset.match
+      ? { pred: ae.dataset.pred, match: ae.dataset.match, selStart: ae.selectionStart, selEnd: ae.selectionEnd }
+      : null;
+
     if (!state.session) {
       root.innerHTML = renderAuth();
       bindAuth();
@@ -508,6 +514,15 @@
     if (state.activeTab !== lastAnimatedTab) {
       lastAnimatedTab = state.activeTab;
       animateTabContent();
+    }
+
+    // Restaurar focus si estaba en un input de predicción
+    if (focusKey) {
+      const el = root.querySelector(`[data-pred="${focusKey.pred}"][data-match="${focusKey.match}"]`);
+      if (el) {
+        el.focus();
+        try { el.setSelectionRange(focusKey.selStart, focusKey.selEnd); } catch (_) {}
+      }
     }
   }
 
@@ -841,16 +856,57 @@
         render();
       });
     });
-    // Auto-save de predicciones con debounce por partido
+    // Auto-save por partido (debounce 250ms) + auto-advance al siguiente input (450ms)
     const debounce = new Map();
+    const advanceTimer = new Map();
+
+    function advanceFrom(inputEl) {
+      // Re-find por si el DOM fue reemplazado tras un render
+      const live = root.querySelector(`[data-pred="${inputEl.dataset.pred}"][data-match="${inputEl.dataset.match}"]`);
+      if (!live || document.activeElement !== live) return;
+      const allInputs = Array.from(root.querySelectorAll("[data-pred]:not([disabled])"));
+      const idx = allInputs.indexOf(live);
+      const next = allInputs[idx + 1];
+      if (!next) return;
+      next.focus();
+      if (next.select) next.select();
+      next.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function gotoPrev(inputEl) {
+      const allInputs = Array.from(root.querySelectorAll("[data-pred]:not([disabled])"));
+      const idx = allInputs.indexOf(inputEl);
+      const prev = allInputs[idx - 1];
+      if (!prev) return;
+      prev.focus();
+      if (prev.select) prev.select();
+      prev.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
     root.querySelectorAll("[data-pred]").forEach((input) => {
-      input.addEventListener("change", () => {
+      input.addEventListener("input", () => {
         const matchId = parseInt(input.dataset.match, 10);
+
+        // save: 250ms idle
         clearTimeout(debounce.get(matchId));
-        debounce.set(
-          matchId,
-          setTimeout(() => savePrediction(matchId), 250)
-        );
+        debounce.set(matchId, setTimeout(() => savePrediction(matchId), 250));
+
+        // auto-advance: 450ms idle (más largo que save → save dispara primero si ambos firan)
+        clearTimeout(advanceTimer.get(input));
+        if (input.value.length >= 1) {
+          advanceTimer.set(input, setTimeout(() => advanceFrom(input), 450));
+        }
+      });
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === "ArrowRight") {
+          e.preventDefault();
+          clearTimeout(advanceTimer.get(input));
+          advanceFrom(input);
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          gotoPrev(input);
+        }
       });
     });
   }
