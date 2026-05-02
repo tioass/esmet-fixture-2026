@@ -72,11 +72,29 @@
 /* ─────── Tabs ─────── */
 .esmet-fixture .esmet-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.15rem;
   border-bottom: 1px solid var(--esmet-neutral-lighter);
   margin-bottom: 1.5rem;
   overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.esmet-fixture .esmet-tabs::-webkit-scrollbar { height: 4px; }
+.esmet-fixture .esmet-tabs::-webkit-scrollbar-thumb { background: var(--esmet-neutral-lighter); border-radius: 4px; }
+.esmet-fixture .esmet-tabs__label {
+  font-size: 0.875rem;
+  color: var(--esmet-neutral);
+  padding: 0.5rem 0.4rem 0.5rem 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.esmet-fixture .esmet-tabs__sep {
+  color: var(--esmet-neutral-lighter);
+  padding: 0 0.5rem;
+  flex-shrink: 0;
+  user-select: none;
 }
 .esmet-fixture .esmet-tab {
   border: none;
@@ -84,11 +102,18 @@
   font-family: inherit;
   font-size: 0.95rem;
   color: var(--esmet-neutral);
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: color 0.2s var(--esmet-ease), border-color 0.2s var(--esmet-ease);
   white-space: nowrap;
+  flex-shrink: 0;
+}
+.esmet-fixture .esmet-tab--letter {
+  padding: 0.5rem 0.6rem;
+  min-width: 2rem;
+  text-align: center;
+  font-weight: 500;
 }
 .esmet-fixture .esmet-tab:hover { color: var(--esmet-black); }
 .esmet-fixture .esmet-tab[aria-selected="true"] {

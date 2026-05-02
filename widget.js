@@ -24,6 +24,11 @@
   root.classList.add("esmet-fixture");
   root.innerHTML = '<div class="esmet-loading">Cargando…</div>';
 
+  // ───────────────────── Dev mode (localhost) ─────────────────────
+  // En localhost no llamamos a Supabase: mockeamos sesión + datos para iterar
+  // UI sin esperar magic link ni hits a la base.
+  const IS_DEV = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
   // ───────────────────── Estado ─────────────────────
   const state = {
     supabase: null,
@@ -43,6 +48,9 @@
   };
 
   const firstName = (full) => (full ?? "").trim().split(/\s+/)[0] || "vos";
+
+  // Track última tab animada para no re-animar en cada render parcial
+  let lastAnimatedTab = null;
 
   // ───────────────────── Helpers ─────────────────────
   const fmtDate = (iso) => {
@@ -74,6 +82,147 @@
     }, 4000);
   }
 
+  // ───────────────────── Mock data (dev mode) ─────────────────────
+  // Replica la estructura real del Mundial 2026:
+  //   12 grupos × 4 equipos = 48 selecciones
+  //   72 partidos de fase de grupos (6 por grupo, 3 jornadas)
+  //   32 partidos de knockout (16 R32 + 8 R16 + 4 QF + 2 SF + 1 3er puesto + 1 Final)
+  function loadMockData(formName, formEmail) {
+    const flag = (code) => `https://a.espncdn.com/i/teamlogos/countries/500/${code.toLowerCase()}.png`;
+    const GROUPS = {
+      A: [["Mexico","MEX"],["Czechia","CZE"],["South Korea","KOR"],["South Africa","RSA"]],
+      B: [["Canada","CAN"],["Bosnia-Herzegovina","BIH"],["Switzerland","SUI"],["Qatar","QAT"]],
+      C: [["Brazil","BRA"],["Scotland","SCO"],["Haiti","HAI"],["Morocco","MAR"]],
+      D: [["Paraguay","PAR"],["Türkiye","TUR"],["Australia","AUS"],["United States","USA"]],
+      E: [["Ecuador","ECU"],["Germany","GER"],["Ivory Coast","CIV"],["Curacao","CUW"]],
+      F: [["Netherlands","NED"],["Sweden","SWE"],["Japan","JPN"],["Tunisia","TUN"]],
+      G: [["Belgium","BEL"],["Iran","IRN"],["Egypt","EGY"],["New Zealand","NZL"]],
+      H: [["Spain","ESP"],["Uruguay","URU"],["Saudi Arabia","KSA"],["Cape Verde","CPV"]],
+      I: [["Norway","NOR"],["France","FRA"],["Senegal","SEN"],["Iraq","IRQ"]],
+      J: [["Argentina","ARG"],["Austria","AUT"],["Algeria","ALG"],["Jordan","JOR"]],
+      K: [["Colombia","COL"],["Portugal","POR"],["Uzbekistan","UZB"],["Congo DR","COD"]],
+      L: [["England","ENG"],["Croatia","CRO"],["Panama","PAN"],["Ghana","GHA"]],
+    };
+
+    // Equipos: 48 reales + 32 placeholders para cuadro de eliminación
+    const teams = [];
+    const teamIdByName = {};
+    let nid = 1;
+    for (const [letter, list] of Object.entries(GROUPS)) {
+      for (const [name, code] of list) {
+        const t = { id: nid++, name, code, group_letter: letter, flag_url: flag(code) };
+        teams.push(t);
+        teamIdByName[name] = t.id;
+      }
+    }
+    const placeholderStart = nid;
+    for (let i = 0; i < 32; i++) {
+      teams.push({ id: nid++, name: `Por definir ${i + 1}`, code: null, group_letter: null, flag_url: null });
+    }
+    state.teams = teams;
+
+    // Helper para fechas
+    const dateAt = (day, hourUtc) => {
+      const d = new Date("2026-06-11T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() + day);
+      d.setUTCHours(hourUtc, 0, 0, 0);
+      return d.toISOString();
+    };
+
+    // Round-robin: 4 equipos → 6 partidos en 3 rondas
+    // Pares: (0v1,2v3) (0v2,3v1) (0v3,1v2)
+    const PAIRS = [[0,1],[2,3], [0,2],[3,1], [0,3],[1,2]];
+    const matches = [];
+    let mid = 1000;
+
+    Object.entries(GROUPS).forEach(([letter, list], gi) => {
+      const tids = list.map(([n]) => teamIdByName[n]);
+      PAIRS.forEach(([h, a], idx) => {
+        const round = Math.floor(idx / 2) + 1;
+        // J1: día 0–4, J2: 6–10, J3: 11–15
+        const dayBase = round === 1 ? 0 : round === 2 ? 6 : 11;
+        const day = dayBase + (gi % 4);
+        const hour = 15 + ((gi + idx) % 4) * 3;
+
+        // Variedad de estados:
+        let status = "scheduled", hs = null, as = null;
+        if (letter === "A" && round === 1) { status = "finished"; hs = idx === 0 ? 2 : 1; as = idx === 0 ? 1 : 1; }
+        else if (letter === "B" && round === 1 && idx === 0) { status = "live"; hs = 1; as = 0; }
+        else if (letter === "C" && round === 1) { status = "finished"; hs = 3; as = 0; }
+
+        matches.push({
+          id: mid++, stage: "Group Stage", group_letter: letter,
+          round_label: `Fase de Grupos · Jornada ${round}`,
+          kickoff_at: dateAt(day, hour),
+          home_team_id: tids[h], away_team_id: tids[a],
+          home_score: hs, away_score: as, status,
+        });
+      });
+    });
+
+    // Knockout — usa placeholder teams (TBD)
+    const ph = (i) => placeholderStart + (i % 32);
+    const ko = (count, stage, label, day0, daySpan) => {
+      for (let i = 0; i < count; i++) {
+        const day = day0 + Math.floor((i / count) * daySpan);
+        const hour = 15 + (i % 3) * 4;
+        matches.push({
+          id: mid++, stage, group_letter: null, round_label: label,
+          kickoff_at: dateAt(day, hour),
+          home_team_id: ph(i * 2), away_team_id: ph(i * 2 + 1),
+          home_score: null, away_score: null, status: "scheduled",
+        });
+      }
+    };
+    ko(16, "Round of 32", "Treintaidosavos", 16, 4);  // jun 27–30
+    ko(8,  "Round of 16", "Octavos de Final", 23, 4); // jul 4–7
+    ko(4,  "Quarter-finals", "Cuartos de Final", 28, 4); // jul 9–12
+    ko(2,  "Semi-finals", "Semifinales", 33, 2);      // jul 14–15
+    ko(1,  "Third Place", "Tercer Puesto", 37, 1);    // jul 18
+    ko(1,  "Final", "Final", 38, 1);                  // jul 19
+
+    state.matches = matches;
+
+    // Sesión + perfil
+    state.session = { user: { id: "dev-00000000-0000-0000-0000-000000000001" } };
+    state.profile = {
+      id: state.session.user.id,
+      name: formName || "Andrés Sentis",
+      email: formEmail || "dev@local",
+    };
+
+    // Predicciones de ejemplo: algunas con puntos cargados, otras pendientes
+    const userId = state.session.user.id;
+    state.predictions = new Map();
+    const findMatch = (gl, round, idx) =>
+      matches.find(m => m.group_letter === gl && m.round_label === `Fase de Grupos · Jornada ${round}` && matches.indexOf(m) % 2 === idx);
+    // Pick exacto en finalizado (3 pts)
+    state.predictions.set(matches[0].id, { id: "p1", user_id: userId, match_id: matches[0].id, home_score: 2, away_score: 1, points_awarded: 3 });
+    // Pick con resultado correcto, marcador errado (1 pt)
+    state.predictions.set(matches[1].id, { id: "p2", user_id: userId, match_id: matches[1].id, home_score: 2, away_score: 0, points_awarded: 1 });
+    // Pick errado en finalizado (0 pts)
+    const cFinished = matches.filter(m => m.group_letter === "C" && m.status === "finished")[0];
+    if (cFinished) state.predictions.set(cFinished.id, { id: "p3", user_id: userId, match_id: cFinished.id, home_score: 0, away_score: 1, points_awarded: 0 });
+    // Live match con predicción
+    const live = matches.find(m => m.status === "live");
+    if (live) state.predictions.set(live.id, { id: "p4", user_id: userId, match_id: live.id, home_score: 2, away_score: 1 });
+    // Algunas predicciones futuras
+    matches.filter(m => m.status === "scheduled").slice(0, 8).forEach((m, i) => {
+      state.predictions.set(m.id, { id: `pf-${i}`, user_id: userId, match_id: m.id, home_score: (i + 1) % 4, away_score: i % 3 });
+    });
+
+    state.bonus = { user_id: userId, champion_team_id: teamIdByName["Argentina"], runner_up_team_id: teamIdByName["France"], points_awarded: null };
+    state.totalPoints = 4;
+    state.leaderboard = [
+      { user_id: "u-2", name: "Mariano Rey", total_points: 18, exact_count: 4, graded_count: 12 },
+      { user_id: "u-3", name: "David Grandes", total_points: 14, exact_count: 2, graded_count: 12 },
+      { user_id: "u-5", name: "Roberto Guerrero", total_points: 9, exact_count: 1, graded_count: 12 },
+      { user_id: userId, name: state.profile.name, total_points: 4, exact_count: 1, graded_count: 4 },
+      { user_id: "u-4", name: "Cristian Adamo", total_points: 2, exact_count: 0, graded_count: 12 },
+    ];
+    state.activeTab = "A";
+  }
+
   // ───────────────────── Init ─────────────────────
   // supabase-js se carga vía un <script> separado en el embed de Webflow.
   // Si el embed se rompió, esperamos hasta 8s a que window.supabase aparezca.
@@ -94,6 +243,10 @@
   }
 
   async function init() {
+    if (IS_DEV) {
+      render();
+      return;
+    }
     const sb = await waitForSupabase();
     state.supabase = sb.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
@@ -199,6 +352,12 @@
     const email = form.email.value.trim().toLowerCase();
     if (!name || !email) return;
 
+    if (IS_DEV) {
+      loadMockData(name, email);
+      render();
+      return;
+    }
+
     const btn = form.querySelector("button[type=submit]");
     btn.disabled = true;
     btn.textContent = "Enviando…";
@@ -226,6 +385,15 @@
   }
 
   async function handleSignOut() {
+    if (IS_DEV) {
+      Object.assign(state, {
+        session: null, profile: null, teams: [], matches: [],
+        predictions: new Map(), bonus: null, leaderboard: [],
+        totalPoints: 0, activeTab: null, modalOpen: null,
+      });
+      render();
+      return;
+    }
     await state.supabase.auth.signOut();
   }
 
@@ -242,6 +410,16 @@
 
     state.saving.add(matchId);
     render();
+
+    if (IS_DEV) {
+      state.predictions.set(matchId, {
+        user_id: state.session.user.id, match_id: matchId,
+        home_score: home, away_score: away,
+      });
+      state.saving.delete(matchId);
+      render();
+      return;
+    }
 
     const row = {
       user_id: state.session.user.id,
@@ -272,6 +450,16 @@
     const champion = championSel.value ? parseInt(championSel.value, 10) : null;
     const runnerUp = runnerSel.value ? parseInt(runnerSel.value, 10) : null;
 
+    if (IS_DEV) {
+      state.bonus = {
+        user_id: state.session.user.id,
+        champion_team_id: champion,
+        runner_up_team_id: runnerUp,
+      };
+      setFlash("success", "Bonus guardados (dev mock).");
+      return;
+    }
+
     const row = {
       user_id: state.session.user.id,
       champion_team_id: champion,
@@ -296,18 +484,46 @@
     if (!state.session) {
       root.innerHTML = renderAuth();
       bindAuth();
+      lastAnimatedTab = null;
       return;
     }
     root.innerHTML = renderApp();
     bindApp();
+
+    // Animar cards solo al cambiar de tab
+    if (state.activeTab !== lastAnimatedTab) {
+      lastAnimatedTab = state.activeTab;
+      animateTabContent();
+    }
+  }
+
+  function animateTabContent() {
+    if (!window.gsap) return;
+    const cards = root.querySelectorAll(".esmet-match, .esmet-bonus");
+    if (cards.length === 0) return;
+    window.gsap.fromTo(
+      cards,
+      { y: 16, opacity: 0 },
+      {
+        y: 0,
+        opacity: 1,
+        duration: 0.4,
+        // amount = stagger total distribuido entre todos los cards.
+        // Para 6 cards de un grupo: ~0.12s entre cada. Para 16 cards de R32: ~0.05s entre cada.
+        // Si querés stagger fijo "cada card", reemplazá por: stagger: 0.2
+        stagger: { amount: 0.7, from: "start" },
+        ease: "power2.out",
+        overwrite: true,
+      }
+    );
   }
 
   function renderAuth() {
     const flash = renderFlash();
     return `
       <div class="esmet-auth">
-        <h1>Fixture Esmet 2026</h1>
-        <p>Predeci los marcadores, sumá puntos y peleá la cima del ranking.</p>
+        <h2>Crea tu cuenta</h2>
+        <p>Predicciones del Mundial 2026 con ranking en vivo.</p>
         ${flash}
         <form data-form="auth">
           <div class="esmet-field">
@@ -328,26 +544,22 @@
   function renderApp() {
     const groups = [...new Set(state.matches.map((m) => m.group_letter).filter(Boolean))].sort();
     const hasKnockout = state.matches.some((m) => !m.group_letter);
-    const tabs = [
-      ...groups.map((g) => ({ id: g, label: `Grupo ${g}` })),
-      ...(hasKnockout ? [{ id: "knockout", label: "Eliminatorias" }] : []),
-      { id: "bonus", label: "Bonus" },
-    ];
+
+    const groupTab = (g) =>
+      `<button class="esmet-tab esmet-tab--letter" role="tab" aria-selected="${state.activeTab === g}" data-tab="${g}">${g}</button>`;
+    const wideTab = (id, label) =>
+      `<button class="esmet-tab" role="tab" aria-selected="${state.activeTab === id}" data-tab="${id}">${label}</button>`;
 
     return `
       <h1 class="esmet-title">Fixture Esmet 2026</h1>
       ${renderUserbar()}
       ${renderFlash()}
       <div class="esmet-tabs" role="tablist">
-        ${tabs
-          .map(
-            (t) => `
-          <button class="esmet-tab" role="tab" aria-selected="${state.activeTab === t.id}" data-tab="${t.id}">
-            ${escape(t.label)}
-          </button>
-        `
-          )
-          .join("")}
+        ${groups.length > 0 ? '<span class="esmet-tabs__label">Grupo:</span>' : ""}
+        ${groups.map(groupTab).join("")}
+        ${(hasKnockout || true) && groups.length > 0 ? '<span class="esmet-tabs__sep" aria-hidden="true">|</span>' : ""}
+        ${hasKnockout ? wideTab("knockout", "Eliminatorias") : ""}
+        ${wideTab("bonus", "Bonus")}
       </div>
       ${renderTabContent()}
       ${renderFooter()}
@@ -457,11 +669,12 @@
       </div>`;
     } else if (locked) {
       statusBlock = `<div class="esmet-match__status">Cerrado</div>`;
+    } else if (saving) {
+      statusBlock = `<div class="esmet-match__status"><span>Guardando…</span></div>`;
+    } else if (pred) {
+      statusBlock = `<div class="esmet-match__status"><span>✓ Predicción guardada</span></div>`;
     } else {
-      statusBlock = `<div class="esmet-match__status">
-        <span>${escape(fmtDate(m.kickoff_at))}</span>
-        ${saving ? "<span>Guardando…</span>" : pred ? "<span>✓ Predicción guardada</span>" : ""}
-      </div>`;
+      statusBlock = "";
     }
 
     const homeVal = pred?.home_score ?? "";
