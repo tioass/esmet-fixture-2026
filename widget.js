@@ -28,6 +28,14 @@
     root.innerHTML = '<div class="esmet-loading">Cargando…</div>';
   }
 
+  // Diagnóstico: si el skeleton sigue ahí después de 10s, mostramos en qué paso se trabó
+  let __initStep = "boot";
+  const __safetyTimer = setTimeout(() => {
+    if (root.querySelector(".esmet-skel")) {
+      root.innerHTML = `<div class="esmet-error" style="font-family:ui-monospace,monospace;font-size:13px">Init se trabó en: <strong>${__initStep}</strong>. Refresh la página o mandame screenshot.</div>`;
+    }
+  }, 10000);
+
   // ───────────────────── Dev mode (localhost) ─────────────────────
   // En localhost no llamamos a Supabase: mockeamos sesión + datos para iterar
   // UI sin esperar magic link ni hits a la base.
@@ -248,18 +256,24 @@
   }
 
   async function init() {
+    __initStep = "init-start";
     if (IS_DEV) {
-      // Saltea login en dev: carga mock data directamente y muestra el fixture
+      __initStep = "dev-mock";
       loadMockData();
+      __initStep = "dev-render";
       render();
       return;
     }
+    __initStep = "wait-supabase";
     const sb = await waitForSupabase();
+    __initStep = "create-client";
     state.supabase = sb.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     });
 
+    __initStep = "get-session";
     const { data } = await state.supabase.auth.getSession();
+    __initStep = data?.session ? "post-session-logged" : "post-session-anon";
     state.session = data.session;
 
     state.supabase.auth.onAuthStateChange(async (event, session) => {
@@ -281,8 +295,10 @@
       }
     });
 
+    __initStep = state.session ? "load-app-data" : "render-auth";
     if (state.session) await loadAppData();
     else render();
+    __initStep = "complete";
   }
 
   // ───────────────────── Data loading ─────────────────────
@@ -985,8 +1001,11 @@
     });
   }
 
-  init().catch((err) => {
-    console.error(err);
-    root.innerHTML = `<div class="esmet-error">Error al iniciar el widget: ${escape(err.message)}</div>`;
-  });
+  init()
+    .catch((err) => {
+      console.error(err);
+      __initStep = "error: " + err.message;
+      root.innerHTML = `<div class="esmet-error">Error al iniciar el widget: ${escape(err.message)}</div>`;
+    })
+    .finally(() => clearTimeout(__safetyTimer));
 })();
