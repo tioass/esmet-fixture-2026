@@ -306,6 +306,15 @@
 .esmet-fixture .odometer-formatting-mark {
   font-family: 'Alliance No', Arial, sans-serif !important;
 }
+/* Override del transition default del theme (2s) → snappy 400ms */
+.esmet-fixture .odometer.odometer-animating-up .odometer-ribbon-inner,
+.esmet-fixture .odometer.odometer-animating-down.odometer-animating .odometer-ribbon-inner,
+.esmet-fixture .odometer.odometer-animating-up.odometer-animating-down .odometer-ribbon-inner {
+  -webkit-transition: -webkit-transform 0.4s ease-out !important;
+  -moz-transition: -moz-transform 0.4s ease-out !important;
+  -o-transition: -o-transform 0.4s ease-out !important;
+  transition: transform 0.4s ease-out !important;
+}
 
 @media (max-width: 600px) {
   .esmet-fixture .esmet-countdown__grid { gap: 0.5rem; }
