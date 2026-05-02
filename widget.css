@@ -251,6 +251,59 @@
 .esmet-fixture .esmet-leaderboard tr.esmet-me { background: rgba(200, 87, 60, 0.08); font-weight: 500; }
 .esmet-fixture .esmet-leaderboard .esmet-rank { font-weight: 500; }
 
+/* ─────── Skeleton (pre-render para evitar layout shift) ─────── */
+.esmet-fixture .esmet-skel {
+  padding-top: 0.5rem;
+}
+.esmet-fixture .esmet-skel__countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 2rem;
+}
+.esmet-fixture .esmet-skel__cap { width: 220px; height: 12px; }
+.esmet-fixture .esmet-skel__nums { display: flex; gap: 1.5rem; }
+.esmet-fixture .esmet-skel__num { width: 64px; height: 72px; }
+.esmet-fixture .esmet-skel__userbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0 1rem;
+  border-bottom: 1px solid var(--esmet-neutral-lighter);
+  margin-bottom: 1.5rem;
+}
+.esmet-fixture .esmet-skel__pill { width: 70px; height: 28px; border-radius: 100px; }
+.esmet-fixture .esmet-skel__line { height: 14px; }
+.esmet-fixture .esmet-skel__tabs {
+  width: 100%; height: 36px;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--esmet-neutral-lighter);
+}
+.esmet-fixture .esmet-skel__card {
+  width: 100%; height: 110px;
+  margin-bottom: 0.75rem;
+}
+.esmet-fixture .esmet-skel__cap,
+.esmet-fixture .esmet-skel__num,
+.esmet-fixture .esmet-skel__pill,
+.esmet-fixture .esmet-skel__line,
+.esmet-fixture .esmet-skel__tabs,
+.esmet-fixture .esmet-skel__card {
+  background: linear-gradient(90deg, var(--esmet-neutral-lightest) 0%, #f8f8f8 50%, var(--esmet-neutral-lightest) 100%);
+  background-size: 200% 100%;
+  animation: esmet-skel-shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--esmet-radius-sm);
+}
+@keyframes esmet-skel-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (max-width: 600px) {
+  .esmet-fixture .esmet-skel__num { width: 48px; height: 48px; }
+  .esmet-fixture .esmet-skel__nums { gap: 0.5rem; }
+}
+
 /* ─────── Countdown ─────── */
 .esmet-fixture .esmet-countdown {
   text-align: center;

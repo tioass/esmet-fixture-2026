@@ -22,7 +22,11 @@
     return;
   }
   root.classList.add("esmet-fixture");
-  root.innerHTML = '<div class="esmet-loading">Cargando…</div>';
+  // Si el embed ya viene con skeleton pre-renderizado, no lo tocamos hasta el primer render real.
+  // Si no viene con skeleton, mostramos un mini "Cargando…" como fallback.
+  if (!root.querySelector(".esmet-skel")) {
+    root.innerHTML = '<div class="esmet-loading">Cargando…</div>';
+  }
 
   // ───────────────────── Dev mode (localhost) ─────────────────────
   // En localhost no llamamos a Supabase: mockeamos sesión + datos para iterar
