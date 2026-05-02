@@ -44,6 +44,7 @@
     flash: null, // { type: "success"|"error", text }
     saving: new Set(), // match ids saving
     modalOpen: null, // null | "leaderboard"
+    countdownInterval: null,
     redirectUrl: window.location.href.split("#")[0],
   };
 
@@ -516,6 +517,11 @@
       animateTabContent();
     }
 
+    // Re-iniciar countdown si hay DOM nuevo (los _odo de los elementos viejos se perdieron)
+    if (root.querySelector("[data-countdown]")) {
+      startCountdown();
+    }
+
     // Restaurar focus si estaba en un input de predicción
     if (focusKey) {
       const el = root.querySelector(`[data-pred="${focusKey.pred}"][data-match="${focusKey.match}"]`);
@@ -580,7 +586,7 @@
       `<button class="esmet-tab" role="tab" aria-selected="${state.activeTab === id}" data-tab="${id}">${label}</button>`;
 
     return `
-      <h1 class="esmet-title">Fixture Esmet 2026</h1>
+      ${renderCountdown()}
       ${renderUserbar()}
       ${renderFlash()}
       <div class="esmet-tabs" role="tablist">
@@ -594,6 +600,70 @@
       ${renderFooter()}
       ${renderModal()}
     `;
+  }
+
+  // Inicio del Mundial 2026: 11 de junio, 19:00 UTC (kickoff Mexico vs Sudáfrica)
+  const TOURNAMENT_START_MS = Date.parse("2026-06-11T19:00:00Z");
+
+  function renderCountdown() {
+    if (Date.now() >= TOURNAMENT_START_MS) return ""; // post-Mundial: nada
+    return `
+      <div class="esmet-countdown" data-countdown>
+        <div class="esmet-countdown__caption">Faltan para el Mundial</div>
+        <div class="esmet-countdown__grid">
+          <div class="esmet-countdown__cell">
+            <span class="esmet-countdown__num" data-cd="days">0</span>
+            <span class="esmet-countdown__label">Días</span>
+          </div>
+          <div class="esmet-countdown__cell">
+            <span class="esmet-countdown__num" data-cd="hours">0</span>
+            <span class="esmet-countdown__label">Horas</span>
+          </div>
+          <div class="esmet-countdown__cell">
+            <span class="esmet-countdown__num" data-cd="minutes">0</span>
+            <span class="esmet-countdown__label">Min</span>
+          </div>
+          <div class="esmet-countdown__cell">
+            <span class="esmet-countdown__num" data-cd="seconds">0</span>
+            <span class="esmet-countdown__label">Seg</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function startCountdown() {
+    const setVal = (key, val) => {
+      const el = root.querySelector(`[data-cd="${key}"]`);
+      if (!el) return;
+      if (window.Odometer) {
+        if (!el._odo) {
+          el._odo = new window.Odometer({ el, value: val, format: "d", duration: 800 });
+        } else {
+          el._odo.update(val);
+        }
+      } else {
+        el.textContent = val;
+      }
+    };
+    const tick = () => {
+      const diff = TOURNAMENT_START_MS - Date.now();
+      if (diff <= 0) {
+        if (state.countdownInterval) {
+          clearInterval(state.countdownInterval);
+          state.countdownInterval = null;
+        }
+        if (root.querySelector("[data-countdown]")) render();
+        return;
+      }
+      setVal("days", Math.floor(diff / 86400000));
+      setVal("hours", Math.floor((diff / 3600000) % 24));
+      setVal("minutes", Math.floor((diff / 60000) % 60));
+      setVal("seconds", Math.floor((diff / 1000) % 60));
+    };
+    tick();
+    if (state.countdownInterval) clearInterval(state.countdownInterval);
+    state.countdownInterval = setInterval(tick, 1000);
   }
 
   function renderUserbar() {

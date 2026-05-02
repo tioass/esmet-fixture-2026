@@ -1,5 +1,21 @@
 @import url("./tokens.css");
 
+/* Alliance No (font de SMET) servido desde Webflow CDN */
+@font-face {
+  font-family: 'Alliance No';
+  src: url('https://cdn.prod.website-files.com/67c9f5156bcc73ec6c423603/67d477dde038e246b0d531f2_Alliance%20No.1%20Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Alliance No';
+  src: url('https://cdn.prod.website-files.com/67c9f5156bcc73ec6c423603/67d477dd1fec5ae0b0643076_Alliance%20No.1%20Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 .esmet-fixture,
 .esmet-fixture * {
   box-sizing: border-box;
@@ -235,11 +251,70 @@
 .esmet-fixture .esmet-leaderboard tr.esmet-me { background: rgba(200, 87, 60, 0.08); font-weight: 500; }
 .esmet-fixture .esmet-leaderboard .esmet-rank { font-weight: 500; }
 
-/* ─────── Title / userbar / footer ─────── */
-.esmet-fixture .esmet-title {
-  margin: 0 0 1rem;
-  font-size: 2rem;
+/* ─────── Countdown ─────── */
+.esmet-fixture .esmet-countdown {
+  text-align: center;
+  margin: 0.5rem 0 2rem;
+  font-family: 'Alliance No', Arial, sans-serif;
 }
+.esmet-fixture .esmet-countdown__caption {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  color: var(--esmet-neutral);
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+}
+.esmet-fixture .esmet-countdown__grid {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: nowrap;
+}
+.esmet-fixture .esmet-countdown__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+}
+.esmet-fixture .esmet-countdown__num {
+  font-family: 'Alliance No', Arial, sans-serif;
+  font-size: 4.5rem;
+  font-weight: 500;
+  line-height: 0.95;
+  color: var(--esmet-black);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.esmet-fixture .esmet-countdown__label {
+  font-size: 0.7rem;
+  color: var(--esmet-neutral);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-top: 0.5rem;
+  font-weight: 500;
+}
+/* Estilo del odómetro: limpia el background/border default y aplica nuestro tipo */
+.esmet-fixture .odometer {
+  font-family: 'Alliance No', Arial, sans-serif !important;
+  line-height: 0.95;
+}
+.esmet-fixture .odometer-inside,
+.esmet-fixture .odometer-digit,
+.esmet-fixture .odometer-digit-spacer,
+.esmet-fixture .odometer-value,
+.esmet-fixture .odometer-formatting-mark {
+  font-family: 'Alliance No', Arial, sans-serif !important;
+}
+
+@media (max-width: 600px) {
+  .esmet-fixture .esmet-countdown__grid { gap: 0.5rem; }
+  .esmet-fixture .esmet-countdown__cell { min-width: 56px; }
+  .esmet-fixture .esmet-countdown__num { font-size: 2.75rem; }
+  .esmet-fixture .esmet-countdown__label { font-size: 0.625rem; }
+}
+
+/* ─────── Userbar / footer ─────── */
 .esmet-fixture .esmet-userbar {
   display: flex;
   align-items: center;
