@@ -28,13 +28,21 @@
     root.innerHTML = '<div class="esmet-loading">Cargando…</div>';
   }
 
-  // Diagnóstico: si el skeleton sigue ahí después de 10s, mostramos en qué paso se trabó
+  // Diagnóstico: si seguimos en estado de carga después de 10s, mostramos en qué paso se trabó
   let __initStep = "boot";
   const __safetyTimer = setTimeout(() => {
-    if (root.querySelector(".esmet-skel")) {
-      root.innerHTML = `<div class="esmet-error" style="font-family:ui-monospace,monospace;font-size:13px">Init se trabó en: <strong>${__initStep}</strong>. Refresh la página o mandame screenshot.</div>`;
+    const stuck = root.querySelector(".esmet-skel") || root.querySelector(".esmet-loading");
+    if (stuck) {
+      root.innerHTML = `<div class="esmet-error" style="font-family:ui-monospace,monospace;font-size:13px">Init se trabó en: <strong>${__initStep}</strong>. <button onclick="location.reload()" style="margin-left:.5rem;padding:.25rem .75rem;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;border-radius:4px;font:inherit;">Recargar</button></div>`;
     }
   }, 10000);
+
+  // bfcache restore: el browser restaura la página con estado JS intacto pero las
+  // requests pendientes de Supabase se quedan en el limbo. Forzamos reload para
+  // que init corra fresh (igual que primer paint).
+  window.addEventListener("pageshow", (e) => {
+    if (e.persisted) location.reload();
+  });
 
   // ───────────────────── Dev mode (localhost) ─────────────────────
   // En localhost no llamamos a Supabase: mockeamos sesión + datos para iterar
@@ -324,7 +332,8 @@
     const sb = state.supabase;
     const uid = state.session.user.id;
 
-    const [profileRes, teamsRes, matchesRes, predsRes, bonusRes] = await Promise.all([
+    // Timeout 8s para evitar quedarnos colgados si las queries no responden
+    const queries = Promise.all([
       sb.from("profiles").select("*").eq("id", uid).maybeSingle(),
       sb.from("teams").select("*"),
       sb
@@ -336,6 +345,15 @@
       sb.from("predictions").select("*").eq("user_id", uid),
       sb.from("bonus_predictions").select("*").eq("user_id", uid).maybeSingle(),
     ]);
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout cargando fixture (8s)")), 8000));
+
+    let profileRes, teamsRes, matchesRes, predsRes, bonusRes;
+    try {
+      [profileRes, teamsRes, matchesRes, predsRes, bonusRes] = await Promise.race([queries, timeout]);
+    } catch (err) {
+      root.innerHTML = `<div class="esmet-error">${escape(err.message)}. <button onclick="location.reload()" style="margin-left:.5rem;padding:.25rem .75rem;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;border-radius:4px;font:inherit;">Recargar</button></div>`;
+      return;
+    }
 
     state.profile = profileRes.data;
     state.teams = teamsRes.data ?? [];
