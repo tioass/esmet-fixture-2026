@@ -323,6 +323,7 @@
       if (event === "SIGNED_IN" && session) {
         await loadAppData();
       } else if (event === "SIGNED_OUT") {
+        try { localStorage.removeItem(CACHE_KEY); } catch (_) {}
         Object.assign(state, {
           profile: null,
           teams: [],
@@ -343,13 +344,75 @@
     __initStep = "complete";
   }
 
+  // ───────────────────── Cache (localStorage) ─────────────────────
+  // Renderear instantáneamente desde caché en revisitas. La carga real corre en
+  // background sin bloquear la UI. Si la carga falla, el caché sigue ahí.
+  const CACHE_KEY = "esmet-fixture-cache-v1";
+  const CACHE_TTL_MS = 24 * 3600 * 1000;
+
+  function saveCache() {
+    if (!state.session) return;
+    try {
+      const snap = {
+        userId: state.session.user.id,
+        savedAt: Date.now(),
+        profile: state.profile,
+        teams: state.teams,
+        matches: state.matches,
+        predictions: [...state.predictions.entries()],
+        bonus: state.bonus,
+        totalPoints: state.totalPoints,
+        leaderboard: state.leaderboard,
+        activeTab: state.activeTab,
+      };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(snap));
+    } catch (_) {}
+  }
+
+  function loadCache() {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      const snap = JSON.parse(raw);
+      if (!snap || !snap.userId) return null;
+      if (state.session?.user?.id && snap.userId !== state.session.user.id) return null;
+      if (Date.now() - snap.savedAt > CACHE_TTL_MS) return null;
+      return snap;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function hydrateFromCache(snap) {
+    state.profile = snap.profile;
+    state.teams = snap.teams || [];
+    state.matches = snap.matches || [];
+    state.predictions = new Map(snap.predictions || []);
+    state.bonus = snap.bonus;
+    state.totalPoints = snap.totalPoints || 0;
+    state.leaderboard = snap.leaderboard || [];
+    state.activeTab = snap.activeTab;
+  }
+
   // ───────────────────── Data loading ─────────────────────
+  let __loadInProgress = false;
   async function loadAppData() {
-    root.innerHTML = '<div class="esmet-loading">Cargando fixture…</div>';
+    if (__loadInProgress) return; // evita concurrencia
+    __loadInProgress = true;
+
+    // Si hay caché válido, renderear YA (instantáneo) y fetchear en background
+    const cached = loadCache();
+    if (cached) {
+      hydrateFromCache(cached);
+      render();
+    } else {
+      root.innerHTML = '<div class="esmet-loading">Cargando fixture…</div>';
+    }
+
     const sb = state.supabase;
     const uid = state.session.user.id;
 
-    // Timeout 8s para evitar quedarnos colgados si las queries no responden
+    // Timeout 6s para no quedarnos colgados; si hay caché, igual seguimos viéndolo
     const queries = Promise.all([
       sb.from("profiles").select("*").eq("id", uid).maybeSingle(),
       sb.from("teams").select("*"),
@@ -362,12 +425,18 @@
       sb.from("predictions").select("*").eq("user_id", uid),
       sb.from("bonus_predictions").select("*").eq("user_id", uid).maybeSingle(),
     ]);
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout cargando fixture (8s)")), 8000));
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout (6s)")), 6000));
 
     let profileRes, teamsRes, matchesRes, predsRes, bonusRes;
     try {
       [profileRes, teamsRes, matchesRes, predsRes, bonusRes] = await Promise.race([queries, timeout]);
     } catch (err) {
+      __loadInProgress = false;
+      if (cached) {
+        // El caché ya está renderizado: no mostrar error, sólo loguear
+        console.warn("[esmet-fixture] background fetch falló, manteniendo caché", err);
+        return;
+      }
       root.innerHTML = `<div class="esmet-error">${escape(err.message)}. <button onclick="location.reload()" style="margin-left:.5rem;padding:.25rem .75rem;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;border-radius:4px;font:inherit;">Recargar</button></div>`;
       return;
     }
@@ -405,7 +474,9 @@
       })
       .subscribe();
 
+    saveCache();
     render();
+    __loadInProgress = false;
   }
 
   async function loadLeaderboard() {
@@ -416,6 +487,7 @@
       .order("exact_count", { ascending: false })
       .limit(100);
     state.leaderboard = data ?? [];
+    saveCache();
     render();
   }
 
@@ -529,6 +601,7 @@
       return;
     }
     state.predictions.set(matchId, data);
+    saveCache();
     render();
   }
 
@@ -565,6 +638,7 @@
       return;
     }
     state.bonus = data;
+    saveCache();
     setFlash("success", "Bonus guardados.");
   }
 
