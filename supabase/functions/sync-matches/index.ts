@@ -32,10 +32,12 @@ const STATUS_MAP: Record<string, string> = {
   STATUS_ABANDONED: "postponed",
 };
 
-// Determinación de etapa por fecha (calendario oficial WC 2026)
-function determineStage(date: string): { stage: string; round_label: string } {
+// Etapa de knockout por fecha (calendario oficial WC 2026).
+// Solo se usa cuando el partido NO es de fase de grupos (el groupLetter lo determinamos
+// por el equipo, no por fecha — porque la última jornada de algunos grupos cae el 27/28 jun
+// en UTC y se confundía con Round of 32).
+function determineKnockoutStage(date: string): { stage: string; round_label: string } {
   const d = date.slice(0, 10); // "YYYY-MM-DD"
-  if (d <= "2026-06-26") return { stage: "Group Stage", round_label: "Fase de Grupos" };
   if (d <= "2026-07-03") return { stage: "Round of 32", round_label: "Treintaidosavos" };
   if (d <= "2026-07-08") return { stage: "Round of 16", round_label: "Octavos de Final" };
   if (d <= "2026-07-13") return { stage: "Quarter-finals", round_label: "Cuartos de Final" };
@@ -135,10 +137,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { stage, round_label } = determineStage(e.date);
     const homeId = parseInt(home.team?.id, 10);
     const awayId = parseInt(away.team?.id, 10);
-    const groupLetter = stage === "Group Stage" ? teamGroup.get(homeId) ?? null : null;
+    // Si el home team está en standings (= en un grupo), es fase de grupos.
+    // Si no (placeholder de knockout), determinamos la etapa por fecha.
+    const groupLetter = teamGroup.get(homeId) ?? null;
+    let stage: string, round_label: string;
+    if (groupLetter) {
+      stage = "Group Stage";
+      round_label = "Fase de Grupos";
+    } else {
+      ({ stage, round_label } = determineKnockoutStage(e.date));
+    }
 
     const statusName = e.status?.type?.name ?? "STATUS_SCHEDULED";
     const status = STATUS_MAP[statusName] ?? "scheduled";
