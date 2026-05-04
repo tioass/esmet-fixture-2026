@@ -28,20 +28,37 @@
     root.innerHTML = '<div class="esmet-loading">Cargando…</div>';
   }
 
-  // Diagnóstico: si seguimos en estado de carga después de 10s, mostramos en qué paso se trabó
+  // Diagnóstico: si seguimos en estado de carga después de 6s, mostramos en qué paso se trabó
   let __initStep = "boot";
   const __safetyTimer = setTimeout(() => {
     const stuck = root.querySelector(".esmet-skel") || root.querySelector(".esmet-loading");
     if (stuck) {
-      root.innerHTML = `<div class="esmet-error" style="font-family:ui-monospace,monospace;font-size:13px">Init se trabó en: <strong>${__initStep}</strong>. <button onclick="location.reload()" style="margin-left:.5rem;padding:.25rem .75rem;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;border-radius:4px;font:inherit;">Recargar</button></div>`;
+      root.innerHTML = `<div class="esmet-error" style="font-family:ui-monospace,monospace;font-size:13px">Se trabó en: <strong>${__initStep}</strong>. <button onclick="location.reload()" style="margin-left:.5rem;padding:.25rem .75rem;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;border-radius:4px;font:inherit;">Recargar</button></div>`;
     }
-  }, 10000);
+  }, 6000);
 
   // bfcache restore: el browser restaura la página con estado JS intacto pero las
   // requests pendientes de Supabase se quedan en el limbo. Forzamos reload para
   // que init corra fresh (igual que primer paint).
   window.addEventListener("pageshow", (e) => {
     if (e.persisted) location.reload();
+  });
+
+  // visibilitychange: iOS Safari a veces NO entra en bfcache pero igual congela
+  // requests cuando el tab está inactivo. Si volvemos al tab y todavía estamos en
+  // pantalla de loading, forzamos reload — equivale a un hard-refresh manual.
+  let __hiddenAt = null;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      __hiddenAt = Date.now();
+      return;
+    }
+    if (__hiddenAt == null) return;
+    const wasHiddenFor = Date.now() - __hiddenAt;
+    __hiddenAt = null;
+    if (wasHiddenFor < 3000) return; // tab switches cortos: no hacer nada
+    const isStuck = !!root.querySelector(".esmet-skel") || !!root.querySelector(".esmet-loading");
+    if (isStuck) location.reload();
   });
 
   // ───────────────────── Dev mode (localhost) ─────────────────────
