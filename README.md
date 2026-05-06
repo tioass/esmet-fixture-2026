@@ -1,622 +1,441 @@
-# Widget embebible en Webflow con backend Supabase — Playbook
+# Fixture/Polla embebible — playbook para replicar
 
-Documentación + plantilla mental para replicar este proyecto (o uno parecido) en otro contexto. Capturo el stack, las decisiones de arquitectura, los patrones de código que vale la pena reusar y los errores que ya pagué.
+Esta es una polla de predicciones de un torneo deportivo, embebida en Webflow. Los usuarios se registran (magic link, sin password), predicen marcadores partido por partido, suman puntos según un sistema (3 exacto / 1 resultado / 0 errado + bonus campeón/finalista) y compiten en un ranking en tiempo real.
 
-> Este repo es una implementación concreta de un fixture del Mundial 2026 embebido en Webflow. Pero el patrón sirve para cualquier widget interactivo con auth, base de datos compartida y datos sincronizados desde una API externa, montado en un sitio Webflow / Wix / WordPress / cualquier shell estático.
+**El repo está armado para que puedas forkearlo y adaptarlo a CUALQUIER torneo deportivo** que tenga datos en ESPN: Champions, Eurocopa, Copa América, Mundial Femenino, Liga local, NBA Playoffs, etc.
 
----
-
-## 1. Cuándo usar este enfoque
-
-✅ **Sí**:
-- Necesitás interacciones con persistencia (login, predicciones, votos, formularios complejos) sobre un sitio que ya está en Webflow / similar.
-- Querés costo cero o casi cero (free tier).
-- El público es chico-mediano (decenas a miles de usuarios).
-- No hay equipo de devops; lo monta una persona.
-
-❌ **No**:
-- Necesitás SSO empresarial / cumplimiento estricto.
-- Esperás >100K usuarios concurrentes.
-- Querés todo en un único framework (Next.js / Remix / etc) — usá ese.
-- El sitio NO está en Webflow (este patrón asume embed en CMS estático).
+> **Tiempo estimado para replicarlo a otro torneo**:
+> - 2–3 horas si ya hiciste este patrón una vez.
+> - 4–6 horas la primera vez (la mayoría es esperar verificación DNS + setup inicial de Supabase).
 
 ---
 
-## 2. Stack final
+## 1. Qué hereda y qué cambia entre fixtures
 
-| Capa | Tecnología | Por qué |
-|---|---|---|
-| **Hosting de assets** | jsDelivr + GitHub público | CDN gratis, integrado con git push. SHA-pinned URLs para invalidar cache. |
-| **Auth** | Supabase Auth (magic link) | Sin password = cero fricción + cero soporte por contraseñas perdidas. |
-| **Base de datos** | Supabase Postgres | RLS para policies declarativas, free tier generoso. |
-| **Backend logic** | Supabase Edge Functions | Deno runtime, deploy con CLI. Para crons + webhooks. |
-| **Realtime** | Supabase Realtime | Push updates al frontend cuando cambia data. |
-| **Email transaccional** | Resend (custom SMTP en Supabase) | 3.000/mes gratis, branded sender (`fixture@tudominio.com`). |
-| **Datos externos** | ESPN unofficial API | Free, sin auth, datos deportivos completos. |
-| **Frontend** | Vanilla JS + GSAP + Odometer.js | Sin framework, ~50KB total, embebible. |
-| **Animaciones** | GSAP (stagger) + Odometer.js | Animations battle-tested, sin dependencias pesadas. |
-| **Tipografía** | Importada del Webflow CDN | Mantiene consistencia visual con el sitio host. |
-| **Dev local** | Python http.server + watcher | Edits instant, sin build step. |
+### Heredás idéntico (no tocás nada)
 
-**Total mensual con uso moderado**: $0.
+- ✅ Schema completo de DB (`profiles`, `teams`, `matches`, `predictions`, `bonus_predictions`, vista `leaderboard`).
+- ✅ RLS policies (lock por kickoff, etc).
+- ✅ Trigger `handle_new_user` (crea profile cuando alguien se registra).
+- ✅ Frontend completo (`widget.js`, `widget.css`, `tokens.css`):
+  - Auth con magic link + lock bypass
+  - Cache localStorage con stale-while-revalidate
+  - Skeleton screen pre-renderizado
+  - bfcache / visibilitychange handlers
+  - Auto-advance focus en mobile
+  - GSAP stagger al cambiar tabs
+  - Odometer countdown con 2 dígitos siempre
+  - Modal del ranking
+  - Bonus picks (campeón / finalista)
+- ✅ Edge functions:
+  - `sync-matches` (cron-friendly con early-exit)
+  - `score-matches` (calcula puntos)
+- ✅ Sistema de scoring: 3 exacto / 1 resultado / 0 errado / 10 campeón / 5 finalista.
 
----
+### Cambiás entre fixtures
 
-## 3. Inicio rápido (45 minutos desde cero)
-
-Pasos en orden. Cada uno tiene su sección detallada después.
-
-1. **Crear repo público en GitHub** (`mi-widget`).
-2. **Copiar archivos base** de este repo (widget.js, widget.css, tokens.css, dev.html, dev.sh, schema.sql, edge functions).
-3. **Adaptar el dominio del modelo de datos** (en este caso "matches/predictions/teams"; en el tuyo: "events/votes/items", "courses/enrollments/lessons", lo que sea).
-4. **Crear proyecto Supabase**, correr `schema.sql`, configurar redirect URLs.
-5. **Conseguir API externa de datos** (si aplica — ESPN, RAWG, Spotify, custom API).
-6. **Deployar Edge Functions** vía Supabase CLI.
-7. **Setup cron** para sincronizar datos (si aplica).
-8. **Configurar SMTP custom** (Resend).
-9. **Pegar embed en Webflow** con SHA-pinned URLs.
+1. **Datos del torneo** (fechas, deporte/liga en ESPN, knockout cutoffs).
+2. **Branding** (nombre, colores, font, logo, copy del countdown y del título).
+3. **Credenciales** (nuevo Supabase project, nuevo dominio Resend, nuevo repo GitHub si querés).
 
 ---
 
-## 4. Arquitectura
+## 2. Antes de arrancar: 3 checks rápidos
 
-```
-[Browser del usuario]
-        │
-        │  embed: <link>+<script> apuntando a jsDelivr
-        ▼
-[ jsDelivr CDN ]
-        │  sirve widget.css + widget.js desde GitHub @SHA-fija
-        │
-[Webflow page]  <main>
-        │  <div id="my-widget" class="my-widget">
-        │    <skeleton pre-renderizado para evitar layout shift>
-        │  </div>
-        │  <script>window.MY_CONFIG = {...}</script>
-        │  <script defer src="...supabase-js"></script>
-        │  <script defer src="...gsap"></script>
-        │  <script defer src="...widget.js"></script>
-        ▼
-[Widget JS ejecuta en el browser]
-        │
-        │  ├─ Lee localStorage cache → render instant si existe
-        │  ├─ Auth via Supabase JS (magic link, lock bypass)
-        │  └─ Realtime subscription a tablas
-        ▼
-[ Supabase ]
-   ├── Auth (magic link → Resend SMTP → email branded)
-   ├── Postgres + RLS (policies por user_id)
-   ├── Realtime (push de cambios al widget)
-   └── Edge Functions
-         ├── /sync-data    ← cron cada N min, llama API externa
-         └── /score-data   ← procesa cuando hay nuevos eventos
-```
-
-**Decisiones de arquitectura clave:**
-
-- **Static + CDN serving**: el widget vive como archivos estáticos en GitHub. jsDelivr los sirve. Cero servidores propios, cero deploy pipeline.
-- **SHA-pinned URLs en embed**: el embed referencia `@<commit-sha>` en jsDelivr, no `@main`. Esto evita el cache de 12h de jsDelivr en branch refs. Cada update = un push al repo + actualizar SHA en el embed.
-- **Auth = magic link sin password**: minimiza fricción y soporte. Implementación en Supabase es 1 línea de código.
-- **Auth bypass via `lock: () => fn()`**: el navigator lock de supabase-js cuelga `getSession()` en algunos browsers (issue conocido). Pasar un lock no-op lo bypasse.
-- **Cache local agresivo**: localStorage guarda snapshot del estado completo. Visitas posteriores → render instantáneo desde cache + fetch en background. Si el fetch falla, la cache sigue en pantalla.
-- **Cron en Postgres**: pg_cron + pg_net dentro de Supabase, sin servicio externo. La función Edge se autentica con un `CRON_SECRET` random, no con `service_role`.
-- **Skeleton pre-renderizado en el embed**: evita layout shift al cargar. El JS detecta el skeleton y no lo wipea hasta el primer render real.
-
----
-
-## 5. Setup detallado
-
-### 5.1 Repo + assets en GitHub
+### Check 1 — ¿ESPN tiene tu torneo?
 
 ```bash
-mkdir mi-widget && cd mi-widget
-git init
-# Copiar archivos base de este repo
-gh repo create mi-widget --public --source=. --push
+# Reemplazá {sport}, {league} y dates por los del torneo target
+curl -sS "https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard?dates=20270601-20270731&limit=200" \
+  | python3 -c "import sys,json; print('events:', len(json.load(sys.stdin).get('events', [])))"
 ```
 
-Adaptá `widget.js`, `widget.css`, `tokens.css` al dominio. Mantené la estructura de:
-- `tokens.css` — variables de diseño (colores, fonts, radios, sombras)
-- `widget.css` — estilos del widget
-- `widget.js` — IIFE con state, render functions, event bindings
+Tiene que devolver > 0 events. Si devuelve 0, prueba con otro rango de fechas o liga.
 
-**Nombres de clases**: usá un prefix único (`mywidget-` en vez de `esmet-`) para no colisionar con CSS del sitio host.
+**URLs típicas de ESPN**:
+| Torneo | URL slug |
+|---|---|
+| Mundial FIFA | `soccer/fifa.world` |
+| Champions League | `soccer/uefa.champions` |
+| Eurocopa | `soccer/uefa.euro` |
+| Copa América | `soccer/conmebol.america` |
+| Premier League | `soccer/eng.1` |
+| LaLiga | `soccer/esp.1` |
+| Liga Argentina | `soccer/arg.1` |
+| MLS | `soccer/usa.1` |
+| NBA Playoffs | `basketball/nba` |
+| NFL Playoffs | `football/nfl` |
 
-### 5.2 Supabase
+### Check 2 — ¿ESPN tiene standings de grupos?
 
-1. **Crear proyecto** en https://supabase.com (free).
-2. **SQL Editor → New query** → pegar `schema.sql` adaptado:
-   - Tablas con foreign keys a `auth.users(id)` vía `profiles`
-   - RLS habilitada en todas las tablas
-   - Policies tipo `auth.uid() = user_id`
-   - Trigger `handle_new_user` que copia `auth.users` → `profiles` con el nombre del raw_user_meta_data
-3. **Authentication → Providers → Email**:
-   - Confirm email: **OFF** (no queremos doble paso, magic link ya verifica)
+```bash
+curl -sS "https://site.api.espn.com/apis/v2/sports/{sport}/{league}/standings" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print('groups:', [c['name'] for c in d.get('children',[])][:15])"
+```
+
+Si devuelve grupos (e.g., `["Group A", "Group B", ...]`), el sync va a auto-asignar `group_letter` ✓.
+
+Si devuelve un solo bracket o tabla única (típico de Champions, Eurocopa fase de eliminatorias), no hay grupos — todo va a tab "Eliminatorias", no hay tabs por grupo. La UI se adapta sola.
+
+### Check 3 — ¿Tenés dominio para emails brandeados?
+
+- **Sí (`fixture@cliente.com`)** → 15 min de setup en Resend, mejor UX.
+- **No** → arrancá con SMTP default de Supabase (rate limit 4/hora). Para una acción comercial chica con < 30 usuarios concurrentes, va.
+
+---
+
+## 3. Inicio rápido — 7 pasos
+
+### Paso 1 — Forkear el repo
+
+```bash
+git clone https://github.com/tioass/esmet-fixture-2026 mi-nuevo-fixture
+cd mi-nuevo-fixture
+rm -rf .git
+git init
+gh repo create mi-nuevo-fixture --public --source=. --push
+```
+
+### Paso 2 — Adaptar las variables del torneo
+
+Editá los archivos siguientes con los valores nuevos. **Es la parte específica de cada torneo**.
+
+#### `widget.js`
+
+| Buscar | Reemplazar con |
+|---|---|
+| `TOURNAMENT_START_MS = Date.parse("2026-06-11T19:00:00Z")` | la fecha+hora UTC del partido inaugural |
+| `Faltan para el Mundial` | `Faltan para [tu torneo]` |
+| `Fixture del Mundial 2026 con ranking en vivo.` | tu copy de auth subtitle |
+| `Crea tu cuenta` | título del auth screen (probablemente igual) |
+| Mock data de los 12 grupos | adaptar al nuevo torneo (solo se usa en dev mode local) |
+
+#### `supabase/functions/sync-matches/index.ts`
+
+| Línea | Original | Cambiar a |
+|---|---|---|
+| `SCOREBOARD_URL` | `.../soccer/fifa.world/scoreboard?dates=20260611-20260719` | URL+fechas de tu torneo |
+| `STANDINGS_URL` | `.../soccer/fifa.world/standings` | URL de standings de tu torneo |
+| `tournamentStart` | `2026-06-04T00:00:00Z` | ~1 semana antes del kickoff |
+| `tournamentEnd` | `2026-07-20T00:00:00Z` | ~1 día después de la final |
+| `determineKnockoutStage()` | fechas de cutoff del Mundial 2026 | fechas de tu calendario de eliminatorias |
+
+#### `tokens.css`
+
+Las variables de marca: `--esmet-black`, `--esmet-rojo`, `--esmet-beige`, etc. Cambialas a la paleta del cliente nuevo. **Mantené los nombres** (no renombres `--esmet-` a `--otro-`) porque widget.css usa esos nombres.
+
+(Opcional) renombrar el prefijo del CSS de `esmet-` a otra marca: hacé un find/replace global en widget.css y widget.js. ~50 ocurrencias. Lleva 3 minutos.
+
+#### `widget.css`
+
+Si querés font diferente, cambiá el `@font-face` de Alliance No. Si seguís en Webflow, podés copiar la URL del font del CDN de Webflow del cliente nuevo (mirá `cdn.prod.website-files.com/{site-id}/...otf`).
+
+### Paso 3 — Crear nuevo proyecto Supabase
+
+1. https://supabase.com → New project (region South America – São Paulo).
+2. **SQL Editor → New query** → pegar TODO el contenido de [`supabase/schema.sql`](./supabase/schema.sql) → Run.
+3. **Authentication → Providers → Email** → desactivar **"Confirm email"** (queremos magic link directo).
 4. **Authentication → URL Configuration**:
-   - Site URL: la URL de producción
-   - Redirect URLs: agregar staging y prod (con `**` al final para wildcard)
+   - **Site URL**: la URL de producción donde va a vivir el embed.
+   - **Redirect URLs**: agregar staging + producción + (si vas a hacer dev local) `http://localhost:8765/**`.
 5. **Authentication → Email Templates → Magic Link**:
-   - Subject branded en español
-   - Body HTML con tu logo + estilos inline + `{{ .ConfirmationURL }}`
+   - Subject: `Tu link para entrar al [Nombre del fixture]`
+   - Body: copiá [`supabase/email-templates/magic-link.html`](./supabase/email-templates/magic-link.html), adaptá copy y colores. **Sacá el comentario HTML del top** (no se renderiza pero queda feo en algunos clientes).
 
-### 5.3 SMTP custom (Resend)
+### Paso 4 — Setup de SMTP custom (Resend)
 
-Sin esto, los emails salen de `noreply@mail.app.supabase.io` (no branded) y hay rate limit de 4/hora.
+Si saltás esto, los emails van a salir de `noreply@mail.app.supabase.io` y vas a tener rate limit de 4/hora.
 
 1. https://resend.com → Sign up.
-2. **Domains → Add Domain** → tu dominio. Resend te da 3 records DNS (DKIM TXT, SPF MX, SPF TXT).
-3. **Pegar los 3 records** en tu proveedor DNS (Donweb / Cloudflare / GoDaddy / NIC.ar). Importante: van todos en subdominios (`resend._domainkey`, `send`), no tocan tu MX root.
-4. Click **Verify** en Resend → debería ponerse verde en 5-30 min.
-5. **API Keys → Create API Key** → permission: `sending_access`, scope al dominio. Copiá la key (`re_...`).
+2. **Domains → Add Domain** → tu dominio (`cliente.com`). Te da 3 records DNS.
+3. **Pegar los 3 records DNS** en el proveedor del cliente. Importante: van todos en **subdominios** (`resend._domainkey.cliente.com`, `send.cliente.com`), no tocan el MX root → no afecta los emails actuales del cliente.
+   - **Donweb / Plesk**: nombre completo del subdominio (ej: `send.cliente.com.ar`), TTL 3600, prioridad 0 para TXT y 10 para MX.
+   - **Cloudflare / GoDaddy / Namecheap**: poner solo la parte corta (`send`), el panel autocompleta.
+4. Esperar 5–60 min para propagación. Click **Verify** en Resend hasta que se ponga verde.
+5. **API Keys → Create API Key** → name `supabase-smtp`, permission `sending_access`, scope al dominio.
 6. **Supabase → Authentication → Emails → SMTP Settings → Set up SMTP**:
-   - Host: `smtp.resend.com`
-   - Port: `465`
-   - Username: `resend`
-   - Password: la API key
-   - Sender email: `equipo@tudominio.com`
-   - Sender name: `Mi Producto`
 
-### 5.4 API externa de datos (opcional)
+| Campo | Valor |
+|---|---|
+| Sender email | `fixture@cliente.com` |
+| Sender name | tu marca |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | la API key |
 
-Si tu widget necesita data dinámica (deportes, música, productos), buscá una **API pública sin auth** o con free tier. Ejemplos:
-- **Deportes**: ESPN unofficial API (sin key, completa).
-- **Música**: Spotify (con OAuth) o Last.fm.
-- **Películas**: TMDB (key free).
-- **Geo**: OpenStreetMap Nominatim.
-
-**No** uses APIs con key directamente desde el browser — la key queda expuesta. Siempre proxy desde Edge Function.
-
-### 5.5 Edge Functions
+### Paso 5 — Deploy de Edge Functions
 
 ```bash
-supabase login --token sbp_...
-supabase link --project-ref xxx
-supabase secrets set CRON_SECRET=$(openssl rand -hex 32)
-supabase secrets set EXTERNAL_API_KEY=tu_key
-supabase functions deploy sync-data --no-verify-jwt
+# CLI (si no lo tenés instalado): brew install supabase/tap/supabase
+supabase login --token sbp_...   # generar en supabase.com/dashboard/account/tokens
+supabase link --project-ref xxx  # el ref del nuevo proyecto
+
+# Generar y guardar un cron secret nuevo (no reusar el del fixture anterior)
+CRON_SECRET=$(openssl rand -hex 32)
+supabase secrets set CRON_SECRET=$CRON_SECRET
+
+# Deploy ambas functions
+supabase functions deploy sync-matches --no-verify-jwt
+supabase functions deploy score-matches --no-verify-jwt
+
+# Disparar un sync inicial para poblar la base
+curl -sS -X POST "https://xxx.supabase.co/functions/v1/sync-matches?force=1" \
+  -H "Authorization: Bearer $CRON_SECRET"
+# Debería devolver: {"events": N, "teams": M, "matches": N}
 ```
 
-`--no-verify-jwt` porque la función no usa JWT del usuario; se autentica con `CRON_SECRET` que checkeás manualmente:
+### Paso 6 — Programar el cron
 
-```ts
-const cronSecret = Deno.env.get("CRON_SECRET");
-const auth = req.headers.get("Authorization") ?? "";
-if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
-  return new Response("forbidden", { status: 403 });
-}
-```
-
-### 5.6 Cron en Supabase (pg_cron)
+En **Supabase → SQL Editor**, ejecutar (reemplazando `xxx` y el secret):
 
 ```sql
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
+do $$
+begin
+  if exists (select 1 from cron.job where jobname = 'sync-matches-job') then
+    perform cron.unschedule('sync-matches-job');
+  end if;
+end $$;
+
 select cron.schedule(
-  'sync-data-job',
-  '*/10 * * * *',  -- cada 10 min
+  'sync-matches-job',
+  '*/10 * * * *',
   $job$
   select net.http_post(
-    url := 'https://xxx.supabase.co/functions/v1/sync-data',
+    url := 'https://xxx.supabase.co/functions/v1/sync-matches',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer EL_CRON_SECRET_AQUI'
+      'Authorization', 'Bearer EL_CRON_SECRET_DEL_PASO_5'
     )
   );
   $job$
 );
 ```
 
-**Early-exit pattern**: la función chequea cuándo fue la última sync (lee de la tabla); si fue hace poco, retorna sin tocar la API externa. Esto economiza quota:
+### Paso 7 — Pegar embed en Webflow
 
-```ts
-const { data: lastRow } = await supabase
-  .from("data")
-  .select("updated_at")
-  .order("updated_at", { ascending: false })
-  .limit(1);
-if (lastRow?.[0]) {
-  const lastSyncedMs = Date.parse(lastRow[0].updated_at);
-  const minIntervalMs = isHighActivityWindow ? 5 * 60 * 1000 : 24 * 60 * 60 * 1000;
-  if (Date.now() - lastSyncedMs < minIntervalMs) {
-    return new Response(JSON.stringify({ skipped: true }));
-  }
-}
+Tomá la SHA del último commit del repo:
+```bash
+git rev-parse --short HEAD
+# → e58bbc0 (por ejemplo)
 ```
 
-### 5.7 Webflow embed
+Editá [`webflow-embed.html`](./webflow-embed.html):
+- Reemplazá los `@SHA` por la SHA actual
+- Reemplazá `supabaseUrl` y `supabaseAnonKey` por los del nuevo proyecto Supabase
 
-```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/USER/REPO@SHA/widget.css">
-
-<div id="my-widget" class="my-widget">
-  <!-- Skeleton pre-renderizado: el JS no lo wipea hasta el primer render real,
-       evita layout shift -->
-  <div class="my-skel" aria-hidden="true">
-    <!-- estructura mínima que matchea el layout final -->
-  </div>
-</div>
-
-<script>
-  window.MY_CONFIG = {
-    supabaseUrl: "https://xxx.supabase.co",
-    supabaseAnonKey: "sb_publishable_..."
-  };
-</script>
-<!-- Dependencias en orden: lib → utils → widget -->
-<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/USER/REPO@SHA/widget.js"></script>
-```
-
-**Importante**: usar el **commit SHA** en `@SHA`, NO `@main`. jsDelivr cachea `@main` por 12h y la purga no siempre se propaga rápido. Con SHA específico, las URLs son inmutables.
+Pegá el bloque entero en un Embed (HTML) en el `<main>` de la página de Webflow. Publicá.
 
 ---
 
-## 6. Patrones de código que vale la pena copiar
+## 4. Variables clave en una sola tabla (cheat sheet)
 
-### 6.1 IIFE con state + helpers + render
+Si querés saber QUÉ archivo tocar para QUÉ cosa:
 
-```js
-(function () {
-  const cfg = window.MY_CONFIG;
-  if (!cfg?.supabaseUrl) return;
-  const root = document.getElementById("my-widget");
-  if (!root) return;
-  root.classList.add("my-widget");
-  // No wipear si hay skeleton pre-renderizado
-  if (!root.querySelector(".my-skel")) {
-    root.innerHTML = '<div class="my-loading">Cargando…</div>';
-  }
+| Cambio | Archivo | Buscar |
+|---|---|---|
+| Fecha de inicio del torneo (countdown) | `widget.js` | `TOURNAMENT_START_MS` |
+| Texto "Faltan para el Mundial" | `widget.js` | `"Faltan para el Mundial"` |
+| Liga + fechas en ESPN | `sync-matches/index.ts` | `SCOREBOARD_URL`, `STANDINGS_URL` |
+| Fechas de etapas knockout | `sync-matches/index.ts` | `determineKnockoutStage()` |
+| Ventana de "torneo activo" para early-exit del cron | `sync-matches/index.ts` | `tournamentStart`, `tournamentEnd` |
+| Sistema de puntos | `score-matches/index.ts` | `pointsFor()` (3/1/0) y bonus (10/5) |
+| Colores de marca | `tokens.css` | `--esmet-*` (rojo, beige, neutrals) |
+| Font (URL) | `widget.css` | `@font-face` (URL de Webflow CDN) |
+| Subject del email magic link | Supabase dashboard | Authentication → Email Templates |
+| Body del email | `supabase/email-templates/magic-link.html` (copiar al dashboard) | — |
+| Sender de emails | Supabase dashboard | Authentication → Emails → SMTP Settings |
+| Reglas RLS (lock por kickoff) | `supabase/schema.sql` | `predictions_insert_own_before_kickoff` |
+| URLs permitidas para magic link redirect | Supabase dashboard | Authentication → URL Configuration |
 
-  const state = { /* ... */ };
-  const IS_DEV = ["localhost", "127.0.0.1"].includes(location.hostname);
+---
 
-  // Helpers, renderers, bindings...
+## 5. Adaptaciones por escenario
 
-  init().catch(showError).finally(() => clearTimeout(safetyTimer));
-})();
-```
+### Si tu torneo es un knockout puro (Champions, Copa Libertadores avanzada)
 
-### 6.2 waitForSupabase + lock bypass
+- ESPN standings probablemente devuelve un solo bracket, no grupos por letra.
+- El widget detecta: si no hay matches con `group_letter`, **no muestra tabs por grupo, solo "Eliminatorias"**.
+- En `determineKnockoutStage()`, ajustá los rangos de fecha. Por ejemplo Champions:
+  - Round of 16: feb–mar
+  - Quarter-finals: abr
+  - Semi-finals: abr–may
+  - Final: may–jun
 
-```js
-function waitForSupabase() {
-  return new Promise((resolve, reject) => {
-    if (window.supabase?.createClient) return resolve(window.supabase);
-    const start = Date.now();
-    const t = setInterval(() => {
-      if (window.supabase?.createClient) { clearInterval(t); resolve(window.supabase); }
-      else if (Date.now() - start > 8000) { clearInterval(t); reject(new Error("supabase-js no cargó")); }
-    }, 80);
-  });
-}
+### Si tu torneo no está en ESPN
 
-const sb = await waitForSupabase();
-state.supabase = sb.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    // ⚠️ critical fix: bypassa el navigator lock que cuelga getSession
-    lock: async (_name, _timeout, fn) => fn(),
-  },
-});
-
-// getSession con timeout — si cuelga, asumimos anon y onAuthStateChange resuelve después
-const sess = await Promise.race([
-  state.supabase.auth.getSession().then((r) => r.data?.session ?? null),
-  new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
-]);
-state.session = sess;
-```
-
-### 6.3 Cache local con stale-while-revalidate
-
-```js
-const CACHE_KEY = "my-widget-cache-v1";
-const CACHE_TTL_MS = 24 * 3600 * 1000;
-
-function saveCache() { /* serializa state a localStorage */ }
-function loadCache() {
-  const raw = localStorage.getItem(CACHE_KEY);
-  if (!raw) return null;
-  const snap = JSON.parse(raw);
-  if (snap.userId !== state.session?.user?.id) return null; // distinto user
-  if (Date.now() - snap.savedAt > CACHE_TTL_MS) return null; // expiró
-  return snap;
-}
-
-async function loadAppData() {
-  // Si hay cache → render YA (instant), después fetcheamos fresh
-  const cached = loadCache();
-  if (cached) { hydrateFromCache(cached); render(); }
-
-  try {
-    const fresh = await Promise.race([fetchEverything(), timeoutPromise(6000)]);
-    updateState(fresh); saveCache(); render();
-  } catch (err) {
-    if (cached) return; // cache ya está en pantalla, no mostrar error
-    showError(err);
-  }
-}
-```
-
-### 6.4 bfcache + visibilitychange para tab return
-
-```js
-window.addEventListener("pageshow", (e) => {
-  if (e.persisted) location.reload(); // bfcache restore = reload
-});
-
-let __hiddenAt = null;
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { __hiddenAt = Date.now(); return; }
-  if (__hiddenAt == null) return;
-  const wasHiddenFor = Date.now() - __hiddenAt;
-  __hiddenAt = null;
-  if (wasHiddenFor < 3000) return;
-  const isStuck = !!root.querySelector(".my-skel, .my-loading");
-  if (isStuck) location.reload();
-});
-```
-
-### 6.5 Skeleton screen con shimmer
-
-```css
-.my-skel__line, .my-skel__card {
-  background: linear-gradient(90deg, #eee 0%, #f8f8f8 50%, #eee 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.6s ease-in-out infinite;
-  border-radius: 4px;
-}
-@keyframes shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
-```
-
-### 6.6 Auto-advance focus con preservación al re-render
-
-```js
-function render() {
-  // Capturar focus antes de wipe
-  const ae = document.activeElement;
-  const focusKey = ae?.dataset?.field
-    ? { field: ae.dataset.field, key: ae.dataset.key, sel: [ae.selectionStart, ae.selectionEnd] }
-    : null;
-
-  root.innerHTML = renderApp();
-  bindApp();
-
-  // Restaurar focus tras re-render
-  if (focusKey) {
-    const el = root.querySelector(`[data-field="${focusKey.field}"][data-key="${focusKey.key}"]`);
-    if (el) {
-      el.focus();
-      try { el.setSelectionRange(...focusKey.sel); } catch (_) {}
-    }
-  }
-}
-
-// En bindApp: tras 450ms idle, advance al siguiente input
-input.addEventListener("input", () => {
-  // ... save logic
-  clearTimeout(advanceTimer.get(input));
-  if (input.value.length >= 1) {
-    advanceTimer.set(input, setTimeout(() => advanceFrom(input), 450));
-  }
-});
-```
-
-### 6.7 IS_DEV bypass de auth con mock data
-
-```js
-async function init() {
-  if (IS_DEV) {
-    loadMockData();
-    render();
-    return;
-  }
-  // ... real init
-}
-```
-
-Ahorra 30+ segundos por iteración (no esperás magic link en cada reload).
-
-### 6.8 RLS policies con check temporal
+Buscás otra API y reescribís `sync-matches/index.ts`. La interfaz que el widget espera de la base es:
 
 ```sql
-create policy "predictions_insert_own_before_kickoff" on predictions
-  for insert with check (
-    auth.uid() = user_id
-    and exists (
-      select 1 from matches m
-      where m.id = match_id and m.kickoff_at > now()
-    )
-  );
+matches: id, stage, group_letter, round_label, kickoff_at, home_team_id, away_team_id, home_score, away_score, status
+teams: id, name, code, flag_url, group_letter
 ```
 
-Pattern: el server enforce las reglas de negocio aunque el cliente las saltee. La UI desactiva los inputs después del kickoff, pero la DB **rechaza** cualquier write tardío.
+Mientras la función `sync-matches` cargue eso correctamente desde tu fuente, todo lo demás funciona igual. Alternativas a ESPN:
+- **football-data.org** (free tier, requiere key, no incluye todos los torneos)
+- **API-Football** (paga, muy completa)
+- **TheSportsDB** (free, datos a veces incompletos)
+- **Fixture cargado a mano** (CSV → SQL inserts)
 
----
+### Si el sistema de puntos es diferente
 
-## 7. Workflow de desarrollo
+Editá `score-matches/index.ts`, función `pointsFor()`. Ejemplos:
 
-### 7.1 Estructura del repo
+```ts
+// Fútbol estándar (default actual): 3/1/0
+function pointsFor(predH, predA, realH, realA) {
+  if (predH === realH && predA === realA) return 3;
+  return Math.sign(predH - predA) === Math.sign(realH - realA) ? 1 : 0;
+}
 
-```
-mi-widget/
-├── widget.js              ← lógica del widget
-├── widget.css             ← estilos
-├── tokens.css             ← variables de diseño
-├── webflow-embed.html     ← snippet listo para Webflow
-├── dev.html               ← preview local (incluye skeleton + scripts)
-├── dev.sh                 ← arranca python http.server en :8765
-└── supabase/
-    ├── schema.sql         ← tablas + RLS + triggers
-    ├── email-templates/
-    │   └── magic-link.html
-    └── functions/
-        ├── sync-data/index.ts
-        └── score-data/index.ts
-```
+// Más estricto: solo marcador exacto
+function pointsFor(predH, predA, realH, realA) {
+  return (predH === realH && predA === realA) ? 1 : 0;
+}
 
-### 7.2 Iteración local
-
-```bash
-./dev.sh           # http server en :8765
-# en otra terminal:
-# editás widget.js o widget.css
-# refresh en http://localhost:8765/dev.html
-```
-
-Para **mac con archivos en Google Drive**: el sandbox del proceso bloquea acceso. Soluciones:
-1. Mover el repo afuera de Google Drive (recomendado).
-2. O usar un watcher que rsync los archivos a `/tmp/mi-widget` y servir desde ahí. Ver `dev.sh` para el patrón.
-
-Para **bypass de auth en dev**:
-```js
-const IS_DEV = ["localhost", "127.0.0.1"].includes(location.hostname);
-async function init() {
-  if (IS_DEV) { loadMockData(); render(); return; }
-  // real init
+// NBA / Tenis (grandes scores): bonificar diferencia cercana
+function pointsFor(predH, predA, realH, realA) {
+  if (predH === realH && predA === realA) return 5;
+  const outcomeOk = Math.sign(predH - predA) === Math.sign(realH - realA);
+  if (!outcomeOk) return 0;
+  const diff = Math.abs((predH - predA) - (realH - realA));
+  return diff <= 5 ? 3 : 1;
 }
 ```
 
-### 7.3 Commit + deploy
+Y los bonus al final del archivo (los 10 + 5 del campeón / finalista).
+
+### Si querés agregar más bonus
+
+Por ejemplo, `goleador del torneo`:
+
+1. Schema: agregar columna `top_scorer_team_id` a `bonus_predictions` y añadir UI en `renderBonus()`.
+2. `score-matches`: bonificar cuando se sepa el goleador (manual o vía ESPN).
+
+---
+
+## 6. Cosas que NO toques (a menos que sepas qué hacés)
+
+- **El `lock` no-op en `createClient`**: cuelga la app sin él.
+- **El timeout de 3s en `getSession()`**: lo mismo.
+- **Cache `stale-while-revalidate` en `loadAppData`**: es lo que hace que tab return sea instantáneo.
+- **El skeleton pre-renderizado en el embed**: es lo que evita layout shift.
+- **El handler `pageshow` con `event.persisted`**: bfcache restore.
+- **El handler `visibilitychange`**: tab return en iOS Safari.
+- **El override de transition en odometer (`!important`)**: el theme hardcodea 2s.
+- **La estructura de dos odómetros por unidad de countdown**: necesario para zero-padding.
+- **`group_letter` derivado del home team, no de la fecha**: maneja casos como el Mundial 2026 donde la jornada 3 cae el 28 jun UTC.
+
+---
+
+## 7. Workflow de iteración
+
+### Dev local (sin internet de Supabase)
 
 ```bash
-git commit -am "feat: nueva feature"
-git push  # jsDelivr serve el commit en <1min
-# Captura SHA: git rev-parse --short HEAD
-# Actualizar webflow-embed.html con la SHA nueva
-# Pegar nuevo embed en Webflow → publicar
+./dev.sh   # python http.server en :8765
 ```
 
-Convención de SHA-pinning: cada cambio que modifica widget.js o widget.css debe bumpear la SHA en el embed. Yo lo automaticé en este repo con un commit doble: 1) cambio + 2) bump SHA del embed.
+Abrís http://localhost:8765/dev.html. El widget detecta `localhost` (`IS_DEV=true`):
+- Saltea login (carga mock data instantáneo).
+- Bypaseá Supabase, render del fixture sobre 12 grupos × 4 equipos × 3 jornadas + knockout TBD.
+
+Sirve para iterar diseño / interacción sin esperar magic links ni hits a Supabase.
+
+⚠️ **macOS + Google Drive**: el sandbox del proceso bloquea acceso al folder. Mové el repo afuera de Google Drive (recomendado) o usá un watcher con rsync a `/tmp/`.
+
+### Cambio + push + producción
+
+```bash
+git commit -am "feat: X"
+git push
+git rev-parse --short HEAD   # → nuevo SHA, ej: a1b2c3d
+# Editá webflow-embed.html: reemplazar @<sha-vieja> por @a1b2c3d
+git commit -am "Bump embed SHA a a1b2c3d"
+git push
+# Pegar webflow-embed.html nuevo en el Embed de Webflow
+# Click Publish en Webflow
+```
+
+**Importante**: usá `@<commit-sha>` específico, no `@main`. jsDelivr cachea `@main` por 12h.
 
 ---
 
-## 8. Errores comunes (y cómo se resuelven)
+## 8. Checklist antes de go-live
 
-### Auth se cuelga en `getSession`
-- **Síntoma**: skeleton stuck, init log dice `get-session`.
-- **Causa**: navigator lock de supabase-js abandonado por una tab cerrada.
-- **Fix**: `lock: async (_name, _timeout, fn) => fn()` en createClient.
-
-### Layout shift cuando carga el widget
-- **Causa**: el div del embed empieza con altura 0; cuando el JS injecta contenido, la página crece.
-- **Fix**: skeleton screen pre-renderizado dentro del div del embed. El JS detecta `.my-skel` y no lo reemplaza hasta el primer render real.
-
-### "Cargando..." stuck al volver de otra tab
-- **Causa**: bfcache del browser restaura la página con state JS intacto pero requests pendientes abandonadas.
-- **Fix combo**:
-  1. `pageshow` con `event.persisted=true` → `location.reload()`
-  2. `visibilitychange` → si tab estuvo oculta >3s y aún hay loading → reload
-  3. **Cache localStorage**: la próxima visita ya no muestra loading, render desde cache instantáneo.
-
-### jsDelivr sigue sirviendo versión vieja con `@main`
-- **Causa**: TTL de 12h en branch refs.
-- **Fix**: nunca usar `@main` en producción; siempre `@<commit-sha>` específico.
-
-### macOS Google Drive folder: "Operation not permitted"
-- **Causa**: sandbox del proceso bloquea el folder de Google Drive.
-- **Fix**: mover el repo afuera, o usar rsync watcher a `/tmp`.
-
-### Odometer.js no respeta `duration` JS
-- **Causa**: el theme tiene `transition: transform 2s` hardcoded en CSS.
-- **Fix**: override con `!important`:
-  ```css
-  .my-widget .odometer.odometer-animating-up .odometer-ribbon-inner {
-    transition: transform 0.4s ease-in-out !important;
-  }
-  ```
-
-### Odometer no padea ceros (muestra "8" en vez de "08")
-- **Causa**: `parseFloat` descarta el cero líder.
-- **Fix**: dos instancias de Odometer por unidad — una para decenas, una para unidades.
-
-### Email rate limit en Supabase free tier
-- **Síntoma**: 4 emails / hora máximo, después fallan.
-- **Fix**: configurar SMTP custom (Resend con free tier de 3.000/mes).
-
-### Confirm Signup email se manda en vez de Magic Link
-- **Causa**: Authentication → Email Confirmations está ON por default.
-- **Fix**: desactivar "Confirm email" en Email Provider settings. El magic link ya verifica el mail.
-
-### Service role key compartida en chat / código
-- **Causa**: confusión entre publishable (frontend) y secret (backend).
-- **Fix**:
-  - Publishable key (`sb_publishable_*`): puede ir al frontend.
-  - Secret key (`sb_secret_*`): solo en Edge Function secrets via `supabase secrets set`. Si se filtró, **rotar inmediatamente**.
-
-### Webflow no actualiza pese a re-pegar el embed
-- **Causa**: Webflow tiene cache de página en Cloudflare (`surrogate-control: max-age=2147483647`).
-- **Fix**: en Webflow, **publicar** el sitio (no solo guardar). Webflow purga el cache al publish.
-
-### Cron no dispara
-- **Causa 1**: `pg_cron` y `pg_net` no están habilitadas.
-- **Fix**: `create extension if not exists pg_cron; create extension if not exists pg_net;`
-- **Causa 2**: el job está scheduled pero la URL/auth está mal.
-- **Fix**: revisar `select * from cron.job_run_details order by start_time desc limit 5;`
-
----
-
-## 9. Decisiones que pagué iterando (por si te ayudan a saltearte el ciclo)
-
-1. **API-Football (de pago) vs ESPN unofficial**: empecé con API-Football pero el plan free no incluye temporadas futuras. ESPN unofficial es completamente free, sin auth, y tiene los 104 fixtures del Mundial 2026. **Lección**: antes de comprometerse con una API paga, busca alternativas no oficiales.
-
-2. **service_role key en frontend → desastre**: nunca, jamás. Aunque sea "para testear". Se filtra en chat, en logs, en commits. **Siempre** publishable + RLS para frontend; secret solo en Edge Functions.
-
-3. **`@main` en jsDelivr → cache de 12h**: cambié a SHA específica. El embed se re-pega cada vez (un drawback) pero se evita el infierno del "ya pushé pero no se ve".
-
-4. **iOS Safari + bfcache → loading state stuck**: probé varias detecciones. Lo que finalmente funcionó: **cache localStorage con stale-while-revalidate**. Cualquier visita posterior es instant, sin loading state que pueda quedarse stuck.
-
-5. **Repo en Google Drive → sandbox bloquea acceso**: Claude Code intentaba leer credenciales y el OS lo bloqueaba. Workaround: scripts watcher que copian a `/tmp`. Lección para próxima vez: poner el repo en `~/Projects/` desde el día 1.
-
-6. **Webflow Cloud no era una opción**: el usuario lo descartó por complejidad. Para casos así (widget chico) jsDelivr + GitHub es 100x más simple.
-
-7. **Custom SMTP es prácticamente obligatorio**: el rate limit de 4/hora del free tier es muy bajo. Resend con DNS records bien configurados es 15 min de setup y elimina el problema.
-
-8. **GSAP + Odometer.js**: no busqué alternativas porque ya conocía estas. Si optimizás bytes, considerá Motion.js (más liviano que GSAP) y un odómetro custom CSS (para evitar 12KB de Odometer.js).
-
----
-
-## 10. Check antes del go-live
-
-- [ ] `webflow-embed.html` tiene la SHA del último commit que querés deployar.
-- [ ] `Site URL` y `Redirect URLs` en Supabase incluyen staging Y producción.
+- [ ] Edité `TOURNAMENT_START_MS` con la fecha real del partido inaugural.
+- [ ] El countdown muestra el tiempo correcto (verificá en dev local).
+- [ ] `SCOREBOARD_URL` tiene las fechas correctas y devuelve eventos.
+- [ ] `determineKnockoutStage` tiene las fechas de cutoff de mi torneo.
+- [ ] Ejecuté el sync con `?force=1` y la base tiene partidos.
+- [ ] El cron job está creado y funcionando (`select * from cron.job;`).
+- [ ] SMTP custom configurado y verificado con un mail de prueba.
+- [ ] Email template del magic link branded.
+- [ ] Site URL + Redirect URLs incluyen staging Y producción.
 - [ ] "Confirm email" está OFF.
-- [ ] SMTP custom configurado y testeado (mail de prueba al admin).
-- [ ] Email template del magic link está customizado con tu branding.
-- [ ] RLS está habilitada en TODAS las tablas con datos de usuario.
-- [ ] Edge Functions deployadas (`supabase functions list`).
-- [ ] `CRON_SECRET` rotado de cualquier valor que pasó por chat.
-- [ ] Cron job `select * from cron.job` confirma que está agendado.
-- [ ] Datos sembrados (al menos un manual sync con `?force=1`).
-- [ ] Probaste el flujo end-to-end: registro → magic link → entrar → interactuar → cerrar tab → volver → todo OK.
+- [ ] Probé el flow completo: registro → magic link → entrar → predecir → cerrar tab → volver → todo OK.
+- [ ] Probé el flow en mobile (iPhone Safari y/o Android Chrome).
+- [ ] Pegué el embed en Webflow (con la SHA correcta) y publiqué la página.
 
 ---
 
-## Apéndice A: archivos clave para copiar
+## 9. Errores comunes al replicar
 
-Estos son los que más vale la pena reusar tal cual:
+### "El countdown llega a 0 días pero el contenido sigue mostrando el countdown"
+Verificá `TOURNAMENT_START_MS` — si está en el pasado, el widget oculta el countdown automáticamente. Si lo dejaste con la fecha del Mundial 2026, en mayo 2027 el componente lo va a esconder.
 
-- `widget.js` — la estructura del IIFE, helpers de cache, lock bypass, auto-advance.
-- `tokens.css` — pattern de variables namespaced.
-- `widget.css` — selectores con prefix (`my-widget` en vez de `body`), media queries.
-- `supabase/schema.sql` — pattern de profiles + RLS + trigger.
-- `supabase/functions/sync-data/index.ts` — pattern de cron-friendly Edge Function con early-exit y CRON_SECRET auth.
-- `dev.html` — preview local que matchea el embed de prod.
+### "Group J / un grupo específico tiene menos partidos"
+Causa típica: la última jornada de ese grupo cae en una fecha que `determineKnockoutStage` clasifica como Round of 32. **Fix ya aplicado**: el `group_letter` se deriva del home team, no de la fecha. Si lo seguís viendo, tirá un `?force=1` al sync.
 
-## Apéndice B: cosas que faltarían para escalar
+### "Todos los partidos aparecen en 'Eliminatorias', no hay tabs por grupo"
+La standings de ESPN no devolvió grupos. Para torneos sin grupos (Champions de eliminatorias) es esperado. Para un Mundial / Eurocopa, verifica que la URL de standings sea correcta y el torneo esté activo en ESPN.
 
-Si el proyecto crece y necesitás más:
+### "Magic link no llega en mobile"
+1. Verificá Authentication → URL Configuration → Site URL incluye el dominio mobile.
+2. SMTP custom está configurado (sino el rate limit te jode rápido).
+3. Spam folder.
 
-- **Build step + minificación**: actualmente el JS es ~30KB sin minificar. Con esbuild/rollup podés bajarlo a ~12KB. Vale la pena con > 1k usuarios concurrentes.
-- **Monitoring**: Sentry para errores frontend, Logflare para logs de Edge Functions.
-- **Tests**: Playwright para flow end-to-end, vitest para helpers puros.
-- **CI/CD**: GitHub Actions que pushea a GitHub Pages / re-deploy Edge Functions / corre tests en cada PR.
-- **i18n**: si hay multi-idioma, mover strings a un dict externo.
-- **Tipo TypeScript**: convertir widget.js a widget.ts para autocomplete y type safety.
+### "Cargando fixture..." no se va aunque haga reload
+- ¿Está corriendo el cron? `select * from cron.job_run_details order by start_time desc limit 5;`
+- ¿La función responde? `curl -sS -X POST <function-url>?force=1 -H "Authorization: Bearer $CRON_SECRET"`
+- ¿Hay datos? `select count(*) from matches;` (vía SQL editor)
+
+### "Las predicciones no se guardan ('row violates RLS')"
+- Sesión no está autenticada. Mirá el flash de error: tiene un `[sUid=xxx mid=N m=...]` con diagnóstico.
+- O la fecha del partido ya pasó (RLS bloquea inserts después del kickoff).
+
+---
+
+## 10. Estructura del repo (qué hay dónde)
+
+```
+.
+├── README.md                       ← este archivo
+├── widget.js                       ← lógica frontend (IIFE, ~800 líneas)
+├── widget.css                      ← estilos
+├── tokens.css                      ← variables de marca
+├── webflow-embed.html              ← snippet para pegar en Webflow
+├── dev.html                        ← preview local (con skeleton)
+├── dev.sh                          ← arranca dev server en :8765
+└── supabase/
+    ├── schema.sql                  ← tablas + RLS + triggers (idempotente)
+    ├── email-templates/
+    │   └── magic-link.html         ← copiar al dashboard de Supabase
+    └── functions/
+        ├── sync-matches/
+        │   └── index.ts            ← cron-friendly (early-exit)
+        └── score-matches/
+            └── index.ts            ← scoring (3/1/0 + bonus)
+```
+
+---
+
+## 11. Si te quedás trabado
+
+- Issues conocidos y sus fixes están en la sección 9.
+- El `widget.js` tiene un sistema de diagnóstico: si init se traba, después de 6s muestra en pantalla en qué paso falló (`wait-supabase`, `get-session`, `load-app-data`, etc).
+- Logs de Edge Functions: dashboard Supabase → Edge Functions → tu función → Logs.
+- Logs del cron: SQL Editor → `select * from cron.job_run_details order by start_time desc limit 10;`
